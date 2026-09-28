@@ -10,7 +10,7 @@ from .const import DOMAIN
 async def async_get_config_entry_diagnostics(hass, entry):
     coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
     return {
-        "integration_version": "0.1.0",
+        "integration_version": "0.1.1",
         "home_assistant_version": ha_version,
         "protocol_profile": "next_gen_heat_pump",
         "options": dict(entry.options),

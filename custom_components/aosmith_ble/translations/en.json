@@ -35,6 +35,14 @@
       "confirm": {
         "title": "Confirm local connection",
         "description": "Action: {action}. Your local pairing identifier is {identifier}. Save this identifier before continuing. New pairing stores one key in the heater; existing keys are never deleted. No temperature or mode change is made. On a retry after a pairing attempt, this flow reuses this identifier instead of enrolling again."
+      },
+      "discovery_empty": {
+        "title": "Heater not found yet",
+        "description": "Enable Bluetooth on the heater and disconnect other apps. A heater already connected to Home Assistant may stop advertising. Check that a connectable adapter or active Bluetooth proxy is nearby, then retry or enter its address.",
+        "menu_options": {
+          "discover": "Scan again",
+          "manual": "Enter Bluetooth address"
+        }
       }
     },
     "error": {
@@ -57,7 +65,7 @@
     "step": {
       "init": {
         "title": "Polling and experimental controls",
-        "description": "Setpoint writing is based on the APK and still requires hardware validation. Writes are verified by reading back the register.",
+        "description": "Enable setpoint writes to show the temperature editor in the water-heater panel. A separate Temperature setpoint sensor remains readable with this option off. Temperature writes still need a physical-display check on your model.",
         "data": {
           "poll_interval": "Polling interval (seconds)",
           "enable_setpoint_writes": "Enable experimental setpoint writes (95\u2013140\u00b0F)"

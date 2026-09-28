@@ -1,4 +1,4 @@
-# AO Smith Local BLE — experimental 0.1.0
+# AO Smith Local BLE — experimental 0.1.1
 
 Local Bluetooth integration for Home Assistant. No AO Smith account, password,
 cloud API, or internet request is used by the integration at runtime.
@@ -16,7 +16,9 @@ AO Smith **HPS10-80H45DV**, reported firmware **6.4**, on September 28, 2026.
 The owner confirmed authentication, setpoint/mode reads, water availability,
 fault reads, and a Hybrid → Heat Pump → Hybrid change using nRF Connect.
 
-This Python integration still needs its first end-to-end hardware run. It is
+The owner has now run this integration in Home Assistant for 30 minutes with
+working controls and temperature status. Reconnect/restart recovery and a
+physical-display check of temperature writes remain unverified. It is
 designed for other heaters using the same next-generation iCOMM register map.
 An ICOMM advertisement alone does **not** establish compatibility. Older heat
 pump models use different registers and are not supported by this release.
@@ -35,7 +37,7 @@ pump models use different registers and are not supported by this release.
 - Setpoint writing can be enabled in Options for hardware testing; it is disabled
   by default because the encoding is APK-derived but a temperature write has not
   yet been tested. Initial allowed range is 95–140°F; readback verifies the result.
-- Raw hot-water availability level and fault-register sensors.
+- Separate temperature-setpoint, raw hot-water availability and fault-register sensors.
 - Refresh and Reconnect diagnostic buttons.
 - Redacted downloadable diagnostics with the last 60 protocol events.
 - Existing device pairings are never deleted. Routine reconnects never enroll keys.
@@ -81,6 +83,13 @@ Assistant backups preserve them. If a pairing request times out, Retry authentic
 with the same identifier instead of repeatedly enrolling it. If you abandon that
 flow, preserve the displayed identifier and try the Existing pairing option.
 If pair storage is full, this integration stops; it does not delete someone else's key.
+
+## Temperature panel
+
+The water-heater temperature editor appears after enabling **Options → Enable
+experimental setpoint writes**. This is the native water-heater UI; a separate
+climate/thermostat entity is not required. The **Temperature setpoint** sensor
+shows the setting even while writes are disabled. It is not tank temperature.
 
 ## Fast development/debug loop
 

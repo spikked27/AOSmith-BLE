@@ -9,8 +9,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.aosmith_ble.client import HeaterState
-from custom_components.aosmith_ble.config_flow import ConfigFlow, suggested_pin
-from custom_components.aosmith_ble.const import DOMAIN, MODE, SETPOINT
+from custom_components.aosmith_ble.config_flow import ConfigFlow, is_heater, suggested_pin
+from custom_components.aosmith_ble.const import DOMAIN, MODE, SERVICE_UUID, SETPOINT
 from custom_components.aosmith_ble.diagnostics import async_get_config_entry_diagnostics
 from custom_components.aosmith_ble.sensor import HeaterSensor
 from custom_components.aosmith_ble.water_heater import Heater
@@ -50,6 +50,87 @@ def test_sensors_preserve_raw_units(coordinator):
     assert availability.native_value == 5
     assert availability.native_unit_of_measurement is None
     assert HeaterSensor(coordinator, "fault").native_value == 0
+    setpoint = HeaterSensor(coordinator, "target_temperature")
+    assert setpoint.native_value == 125
+    assert setpoint.native_unit_of_measurement == "°F"
+    assert setpoint.extra_state_attributes is None
+
+
+def test_discovery_recognizes_name_or_service():
+    assert is_heater(SimpleNamespace(name="icomm-example", service_uuids=[]))
+    assert is_heater(SimpleNamespace(name="", service_uuids=[SERVICE_UUID.upper()]))
+    assert not is_heater(SimpleNamespace(name="Other device", service_uuids=[]))
+
+
+async def test_discovery_waits_for_uncached_advertisement(tmp_path):
+    hass = HomeAssistant(str(tmp_path))
+    flow = ConfigFlow()
+    flow.hass = hass
+    info = SimpleNamespace(name="ICOMM-test", address="AA:BB:CC:DD:EE:FF", service_uuids=[])
+    with (
+        patch(
+            "custom_components.aosmith_ble.config_flow.bluetooth.async_discovered_service_info",
+            return_value=[],
+        ),
+        patch(
+            "custom_components.aosmith_ble.config_flow.bluetooth.async_request_active_scan", None, create=True
+        ),
+        patch(
+            "custom_components.aosmith_ble.config_flow.bluetooth.async_process_advertisements",
+            AsyncMock(return_value=info),
+        ) as wait,
+    ):
+        result = await flow.async_step_discover()
+    assert result["step_id"] == "discover"
+    assert result["data_schema"]({"address": info.address}) == {"address": info.address}
+    wait.assert_awaited_once()
+    await hass.async_stop()
+
+
+async def test_empty_discovery_offers_retry_and_manual(tmp_path):
+    hass = HomeAssistant(str(tmp_path))
+    flow = ConfigFlow()
+    flow.hass = hass
+    with (
+        patch(
+            "custom_components.aosmith_ble.config_flow.bluetooth.async_discovered_service_info",
+            return_value=[],
+        ),
+        patch(
+            "custom_components.aosmith_ble.config_flow.bluetooth.async_request_active_scan", None, create=True
+        ),
+        patch(
+            "custom_components.aosmith_ble.config_flow.bluetooth.async_process_advertisements",
+            AsyncMock(side_effect=TimeoutError),
+        ),
+    ):
+        result = await flow.async_step_discover()
+    assert result["type"] == "menu"
+    assert result["step_id"] == "discovery_empty"
+    assert set(result["menu_options"]) == {"discover", "manual"}
+    await hass.async_stop()
+
+
+async def test_modern_active_scan_refreshes_discovery(tmp_path):
+    hass = HomeAssistant(str(tmp_path))
+    flow = ConfigFlow()
+    flow.hass = hass
+    info = SimpleNamespace(name="", address="AA:BB:CC:DD:EE:FF", service_uuids=[SERVICE_UUID])
+    with (
+        patch(
+            "custom_components.aosmith_ble.config_flow.bluetooth.async_discovered_service_info",
+            side_effect=[[], [info]],
+        ),
+        patch(
+            "custom_components.aosmith_ble.config_flow.bluetooth.async_request_active_scan",
+            AsyncMock(),
+            create=True,
+        ) as scan,
+    ):
+        result = await flow.async_step_discover()
+    assert result["step_id"] == "discover"
+    scan.assert_awaited_once_with(hass, duration=5)
+    await hass.async_stop()
 
 
 def test_pin_suggestions_do_not_use_shared_defaults():

@@ -20,6 +20,13 @@ def suggested_pin(name):
     return candidate if len(candidate) == 6 and candidate.isascii() and candidate.isdigit() else ""
 
 
+def is_heater(info):
+    names = (info.name or "", getattr(getattr(info, "device", None), "name", "") or "")
+    return any(name.upper().startswith("ICOMM-") for name in names) or SERVICE_UUID in {
+        uuid.lower() for uuid in info.service_uuids
+    }
+
+
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
@@ -43,11 +50,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_menu(step_id="user", menu_options=["discover", "manual"])
 
     async def async_step_discover(self, user_input=None):
-        devices = {
-            info.address.upper(): f"{info.name or 'iCOMM'} ({info.address})"
-            for info in bluetooth.async_discovered_service_info(self.hass, connectable=True)
-            if (info.name or "").startswith("ICOMM-") or SERVICE_UUID in info.service_uuids
-        }
         if user_input:
             self._address = user_input[CONF_ADDRESS].upper()
             info = bluetooth.async_last_service_info(self.hass, self._address, connectable=True)
@@ -55,8 +57,40 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(self._address)
             self._abort_if_unique_id_configured()
             return await self.async_step_credentials()
+
+        def cached_devices():
+            return {
+                info.address.upper(): f"{info.name or 'iCOMM'} ({info.address})"
+                for info in bluetooth.async_discovered_service_info(self.hass, connectable=True)
+                if is_heater(info)
+            }
+
+        devices = cached_devices()
         if not devices:
-            return self.async_abort(reason="no_devices")
+            # Newer HA can explicitly request a short active scan. Older supported
+            # versions can wait for the shared scanner without creating another one.
+            active_scan = getattr(bluetooth, "async_request_active_scan", None)
+            if active_scan is not None:
+                await active_scan(self.hass, duration=5)
+                devices = cached_devices()
+            else:
+                try:
+                    info = await bluetooth.async_process_advertisements(
+                        self.hass,
+                        is_heater,
+                        {"connectable": True},
+                        bluetooth.BluetoothScanningMode.ACTIVE,
+                        5,
+                    )
+                    devices = cached_devices()
+                    devices[info.address.upper()] = f"{info.name or 'iCOMM'} ({info.address})"
+                except TimeoutError:
+                    devices = cached_devices()
+        if not devices:
+            return self.async_show_menu(
+                step_id="discovery_empty",
+                menu_options=["discover", "manual"],
+            )
         return self.async_show_form(
             step_id="discover",
             data_schema=vol.Schema(
