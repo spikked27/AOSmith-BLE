@@ -1,0 +1,25 @@
+{
+  "domain": "aosmith_ble",
+  "name": "AO Smith Local BLE",
+  "bluetooth": [
+    {
+      "local_name": "ICOMM-*",
+      "connectable": true
+    }
+  ],
+  "codeowners": [
+    "@spikked27"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "bluetooth"
+  ],
+  "documentation": "https://github.com/spikked27/AOSmith-BLE",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "requirements": [
+    "bleak-retry-connector>=4.4.3"
+  ],
+  "version": "0.1.0",
+  "issue_tracker": "https://github.com/spikked27/AOSmith-BLE/issues"
+}

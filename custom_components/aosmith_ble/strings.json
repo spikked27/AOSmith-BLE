@@ -1,0 +1,68 @@
+{
+  "title": "AO Smith Local BLE",
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "Connect a water heater",
+        "menu_options": {
+          "discover": "Find a nearby iCOMM heater",
+          "manual": "Enter Bluetooth address manually"
+        }
+      },
+      "discover": {
+        "title": "Choose a heater",
+        "data": {
+          "address": "Heater"
+        }
+      },
+      "manual": {
+        "title": "Heater Bluetooth address",
+        "description": "Enable Bluetooth on the heater and disconnect other apps. A local Bluetooth adapter or active proxy must be in range.",
+        "data": {
+          "address": "Bluetooth address (AA:BB:CC:DD:EE:FF)"
+        }
+      },
+      "credentials": {
+        "title": "Local pairing",
+        "description": "Heater: {name}. This experimental profile supports next-generation iCOMM heat pumps; HPS10-80H45DV is the first tested model. For a new pairing, leave the identifier blank to generate one. To reuse a pairing, enter its exact identifier.",
+        "data": {
+          "pin": "Six-digit PIN",
+          "pairing": "Pairing method",
+          "pairing_identifier": "Existing identifier (optional for new pairing)"
+        }
+      },
+      "confirm": {
+        "title": "Confirm local connection",
+        "description": "Action: {action}. Your local pairing identifier is {identifier}. Save this identifier before continuing. New pairing stores one key in the heater; existing keys are never deleted. No temperature or mode change is made. On a retry after a pairing attempt, this flow reuses this identifier instead of enrolling again."
+      }
+    },
+    "error": {
+      "invalid_address": "Enter a valid Bluetooth MAC address.",
+      "invalid_pin": "Enter six ASCII digits.",
+      "invalid_identifier": "Use exactly 18 ASCII letters/digits.",
+      "identifier_required": "Enter the identifier already enrolled in your heater.",
+      "cannot_connect": "Could not communicate. Disconnect other apps, enable heater Bluetooth, and check adapter/proxy range. Retry reuses the displayed identifier if enrollment was attempted.",
+      "authentication_failed": "Authentication failed. Verify PIN and identifier. If a pairing attempt timed out, reuse that same identifier.",
+      "pairing_full": "The heater has no free pairing slots. No existing keys were deleted.",
+      "invalid_response": "Unexpected or corrupt response. This model may use a different protocol profile.",
+      "unsupported_profile": "Readings do not match the supported next-generation heat-pump profile."
+    },
+    "abort": {
+      "already_configured": "This heater is already configured.",
+      "no_devices": "No compatible advertisements found. Enable heater Bluetooth and try again, or use manual address entry."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Polling and experimental controls",
+        "description": "Setpoint writing is based on the APK and still requires hardware validation. Writes are verified by reading back the register.",
+        "data": {
+          "poll_interval": "Polling interval (seconds)",
+          "enable_setpoint_writes": "Enable experimental setpoint writes (95\u2013140\u00b0F)"
+        }
+      }
+    }
+  }
+}
