@@ -12,7 +12,16 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .client import HeaterClient
-from .const import CONF_IDENTIFIER, CONF_INTERVAL, CONF_PIN, DEFAULT_INTERVAL, NAME
+from .const import (
+    CONF_IDENTIFIER,
+    CONF_INTERVAL,
+    CONF_PIN,
+    DEFAULT_INTERVAL,
+    HOT_WATER_PLUS,
+    INSPECT_REGISTERS,
+    NAME,
+    OPTIONAL_REGISTERS,
+)
 from .protocol import ProtocolError
 
 LOGGER = logging.getLogger(__name__)
@@ -46,6 +55,14 @@ def make_client(hass, data):
 class HeaterCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, entry):
         self.client = make_client(hass, entry.data)
+        self.options = dict(entry.options)
+        if entry.options.get("extended_readings", True):
+            self.client.optional_registers = dict(OPTIONAL_REGISTERS)
+        if entry.options.get("enable_utility_controls", False):
+            for key in ("utility_override", "advanced_load", "utility_enrollment"):
+                self.client.optional_registers[key] = OPTIONAL_REGISTERS[key]
+        if entry.options.get("enable_hot_water_plus", False):
+            self.client.optional_registers["hot_water_plus"] = HOT_WATER_PLUS
         self.address = entry.data[CONF_ADDRESS]
         self.command_lock = asyncio.Lock()
         super().__init__(
@@ -72,3 +89,12 @@ class HeaterCoordinator(DataUpdateCoordinator):
                 self.async_set_update_error(UpdateFailed(str(err)))
                 raise HomeAssistantError(str(err)) from err
             self.async_set_updated_data(state)
+
+    async def async_inspect_registers(self):
+        async with self.command_lock:
+            try:
+                result = await self.client.inspect_registers(INSPECT_REGISTERS)
+            except (BleakError, TimeoutError, ProtocolError) as err:
+                raise HomeAssistantError(str(err)) from err
+        await self.async_request_refresh()
+        return result

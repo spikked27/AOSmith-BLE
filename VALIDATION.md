@@ -1,25 +1,34 @@
-# Validation of development preview 0.1.1
+# Validation of development preview 0.2.0
 
-September 28, 2026.
+September 29, 2026. Python 3.13.15 and Home Assistant 2025.12.5 with its
+Bluetooth/USB dependencies. Ruff lint and formatting checks pass.
 
-- Python 3.13.15; installed Home Assistant 2025.12.5 with its Bluetooth/USB dependencies.
-- 31 passing tests: captured read packets, CRC, temperature encoding, synthetic
-  HMAC fixture, fragmented notifications, unrelated response rejection, expired
-  sessions, reconnect on dropped reads, serialized concurrent operations,
-  successful write/readback, ignored writes, uncertain writes without replay,
-  explicit enrollment, redacted diagnostics, HA entity properties and controls,
-  existing/new pairing flows and enrollment retry behavior.
-- Added discovery tests for delayed advertisements, service-only identification,
-  active-scan support, and retry/manual fallback.
-- Ruff lint and formatting checks passed.
-- One upstream Home Assistant aiohttp deprecation warning during test import.
-- Manual nRF Connect tests on HPS10-80H45DV confirmed wire-level auth, reads, and
-  Heat Pump/Hybrid switching. They did not run this integration's Python code.
+49 automated tests cover captured read packets, exact APK CRC, temperature and
+timed-mode encoding, synthetic HMAC, framing, authentication/recovery, serialized
+requests, write/readback and uncertain writes without replay. New coverage checks
+optional-register rejection, timeout/backoff without losing core readings, manual
+read-only inspection retry, boost's live mode prerequisite, per-heater timed action
+targeting, optional-entity availability, exact A5 switch encoding, feature options,
+and service UI selectors on the minimum supported HA test runtime.
 
-The owner subsequently confirmed 30 minutes connected in Home Assistant with
-working controls and temperature status. Discovery did not find the heater;
-v0.1.1 adds a fresh scan/wait, service-UUID matching and retry/manual fallback.
+One upstream aiohttp/Home Assistant deprecation warning remains during import.
+The tests do not connect to physical BLE hardware.
 
-Still requires discovery retest, additional BLE hardware/proxy tests, temperature
-write verification, reconnect after radio timeout, multi-slot pairing validation,
-and an internet-blocked endurance test. Simulation does not establish these.
+## Owner-confirmed hardware results
+
+Model HPS10-80H45DV, reported firmware 6.4:
+
+- Authentication, register reads and Hybrid → Heat Pump → Hybrid using nRF Connect.
+- 30-minute continuous HA connection with working controls and temperature status.
+- HA setpoint 125 → 124 → 125°F, checked against the heater's physical display.
+- Reconnect Bluetooth action without pressing the heater Bluetooth button.
+- Automatic reconnection after Home Assistant restart without pressing that button.
+
+## Still to validate
+
+Version 0.2.0 timed modes, remaining days, utility registers, and Hot Water Plus
+(on supported models) are APK-derived and have not yet been hardware tested.
+Energy scaling and tariff/schedule programming remain research items.
+Discovery retest, additional adapters/proxies/models, multi-slot pairing, long
+radio idle or heater power interruption, and internet-blocked endurance remain
+open. Passing these tests is not a claim of universal iCOMM compatibility.

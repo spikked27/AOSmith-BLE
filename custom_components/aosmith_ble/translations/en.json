@@ -64,11 +64,34 @@
   "options": {
     "step": {
       "init": {
-        "title": "Polling and experimental controls",
-        "description": "Enable setpoint writes to show the temperature editor in the water-heater panel. A separate Temperature setpoint sensor remains readable with this option off. Temperature writes still need a physical-display check on your model.",
+        "title": "Polling and optional features",
+        "description": "Temperature writes are verified on HPS10-80H45DV. Extended readings tolerate unsupported registers. Utility controls require validation on your model. Enable Hot Water Plus only if your model offers it in iCOMM (next-generation BEST family).",
         "data": {
           "poll_interval": "Polling interval (seconds)",
-          "enable_setpoint_writes": "Enable experimental setpoint writes (95\u2013140\u00b0F)"
+          "enable_setpoint_writes": "Enable temperature controls (95\u2013140\u00b0F)",
+          "extended_readings": "Read remaining days and utility status",
+          "enable_utility_controls": "Enable experimental utility controls",
+          "enable_hot_water_plus": "Enable Hot Water Plus (supported models only)"
+        }
+      }
+    }
+  },
+  "services": {
+    "set_timed_mode": {
+      "name": "Set timed mode",
+      "description": "Electric 1\u201399 days; Vacation 1\u201399 days or 100 for continuously on; Guest 1\u20137 days. APK-derived, requires device validation.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Water heater",
+          "description": "The local integration entry to control."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "Timed operation mode."
+        },
+        "days": {
+          "name": "Days",
+          "description": "Requested duration; Vacation 100 means continuously on."
         }
       }
     }

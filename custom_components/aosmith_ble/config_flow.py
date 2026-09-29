@@ -214,7 +214,18 @@ class OptionsFlow(config_entries.OptionsFlow):
                     ): vol.All(vol.Coerce(int), vol.Range(min=15, max=300)),
                     vol.Required(
                         "enable_setpoint_writes",
-                        default=self.config_entry.options.get("enable_setpoint_writes", False),
+                        default=self.config_entry.options.get("enable_setpoint_writes", True),
+                    ): bool,
+                    vol.Required(
+                        "extended_readings", default=self.config_entry.options.get("extended_readings", True)
+                    ): bool,
+                    vol.Required(
+                        "enable_utility_controls",
+                        default=self.config_entry.options.get("enable_utility_controls", False),
+                    ): bool,
+                    vol.Required(
+                        "enable_hot_water_plus",
+                        default=self.config_entry.options.get("enable_hot_water_plus", False),
                     ): bool,
                 }
             ),

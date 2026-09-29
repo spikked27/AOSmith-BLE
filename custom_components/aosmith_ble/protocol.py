@@ -125,3 +125,12 @@ class FrameBuffer:
             del self.data[:size]
             frames.append(packet)
         return frames
+
+
+def encode_timed_mode(mode: str, days: int) -> int:
+    """APK mode high byte is duration; Vacation 100 means continuously on."""
+    codes = {"Electric": 1, "Vacation": 2, "Guest": 3}
+    maximum = {"Electric": 99, "Vacation": 100, "Guest": 7}
+    if mode not in codes or type(days) is not int or not 1 <= days <= maximum[mode]:
+        raise ValueError("Use Electric 1–99 days, Vacation 1–100 (100 = on), or Guest 1–7 days")
+    return (days << 8) | codes[mode]

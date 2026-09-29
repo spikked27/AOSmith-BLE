@@ -4,13 +4,13 @@ from dataclasses import asdict
 
 from homeassistant.const import __version__ as ha_version
 
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 
 
 async def async_get_config_entry_diagnostics(hass, entry):
     coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
     return {
-        "integration_version": "0.1.1",
+        "integration_version": VERSION,
         "home_assistant_version": ha_version,
         "protocol_profile": "next_gen_heat_pump",
         "options": dict(entry.options),

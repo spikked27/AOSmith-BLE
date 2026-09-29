@@ -4,13 +4,14 @@ import asyncio
 import logging
 from collections import deque
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from time import monotonic
 from typing import Any
 
 from bleak.exc import BleakError
 
-from .const import AVAILABILITY, FAULT, MODE, NOTIFY_UUID, SETPOINT, WRITE_UUID
+from .const import AVAILABILITY, FAULT, HOT_WATER_PLUS, MODE, NOTIFY_UUID, SETPOINT, WRITE_UUID
 from .protocol import (
     FrameBuffer,
     ProtocolError,
@@ -34,6 +35,8 @@ class HeaterState:
     mode: int
     availability: int
     fault: int
+    mode_days: int = 0
+    registers: dict[str, int] = field(default_factory=dict)
 
 
 class HeaterClient:
@@ -69,6 +72,11 @@ class HeaterClient:
         self.connections = 0
         self.authentications = 0
         self.enrollment_attempted = False
+        self.optional_registers = {}
+        self.unsupported_registers = set()
+        self.extended_capture = None
+        self.optional_retry_after = {}
+        self.optional_errors = {}
 
     def _record(self, event, **details):
         record = {"time": datetime.now(timezone.utc).isoformat(), "event": event, **details}
@@ -82,6 +90,8 @@ class HeaterClient:
             "connections": self.connections,
             "authentications": self.authentications,
             "events": list(self.events),
+            "optional_errors": dict(self.optional_errors),
+            "extended_capture": self.extended_capture,
         }
 
     def _disconnected(self, client):
@@ -201,7 +211,68 @@ class HeaterClient:
         mode = await self._read(MODE)
         availability = await self._read(AVAILABILITY)
         fault = await self._read(FAULT)
-        return HeaterState(decode_temperature(temperature), mode & 0xFF, availability & 0xFF, fault)
+        registers = await self._read_optional(self.optional_registers)
+        return HeaterState(
+            decode_temperature(temperature),
+            mode & 0xFF,
+            availability & 0xFF,
+            fault,
+            mode >> 8,
+            registers,
+        )
+
+    async def _read_optional(self, registers, *, retry_unsupported=False):
+        """Bounded known-register reads; failures never invalidate the core snapshot."""
+        values = {}
+        self.optional_errors = {}
+        for key, register in registers.items():
+            if register in self.unsupported_registers and not retry_unsupported:
+                self.optional_errors[key] = "Unsupported; use Inspect to retry"
+                continue
+            if not retry_unsupported and self.optional_retry_after.get(register, 0) > monotonic():
+                self.optional_errors[key] = "Backing off after read failure; use Inspect to retry"
+                continue
+            try:
+                values[key] = await self._read(register)
+                self.optional_retry_after.pop(register, None)
+                self.unsupported_registers.discard(register)
+            except StatusError as err:
+                self.optional_errors[key] = str(err)
+                if err.code == 1:
+                    self.unsupported_registers.add(register)
+                    continue
+                break
+            except (BleakError, TimeoutError, ProtocolError) as err:
+                self.optional_errors[key] = type(err).__name__
+                self.optional_retry_after[register] = monotonic() + 600
+                # Stop on transport/corruption so late responses cannot leak into another read.
+                await self._close()
+                break
+        return values
+
+    async def inspect_registers(self, registers):
+        """Capture only the caller's named allowlist; never issue writes or enroll keys."""
+        async with self._lock:
+            try:
+                await self._ensure_session()
+                values = await self._read_optional(registers, retry_unsupported=True)
+                self.extended_capture = {
+                    "time": datetime.now(timezone.utc).isoformat(),
+                    "registers": {
+                        key: {
+                            "block": reg[0],
+                            "parameter": reg[1],
+                            "raw": values.get(key),
+                            "hex": f"{values[key]:04X}" if key in values else None,
+                            "error": self.optional_errors.get(key, "Not read") if key not in values else None,
+                        }
+                        for key, reg in registers.items()
+                    },
+                }
+                return self.extended_capture
+            except BaseException:
+                await self._close()
+                raise
 
     async def read_state(self) -> HeaterState:
         async with self._lock:
@@ -224,6 +295,8 @@ class HeaterClient:
                 await self._ensure_session()
                 # Read first: renew an expired session before issuing a mutation.
                 await self._read(register)
+                if register == HOT_WATER_PLUS and (await self._read(MODE) & 0xFF) not in (1, 4, 5):
+                    raise ProtocolError("Hot Water Plus requires Electric, Hybrid or Heat pump mode")
                 await asyncio.sleep(self._spacing)
                 self._record("tx", frame=write_frame(*register, value).hex().upper())
                 async with asyncio.timeout(self._timeout):

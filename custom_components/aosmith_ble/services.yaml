@@ -1,0 +1,31 @@
+set_timed_mode:
+  name: Set timed mode
+  description: >-
+    Set Electric for 1–99 days, Vacation for 1–99 days (100 means on until changed),
+    or Guest for 1–7 days. Requires device validation on your model.
+  fields:
+    config_entry_id:
+      name: Water heater
+      required: true
+      selector:
+        config_entry:
+          integration: aosmith_ble
+    mode:
+      name: Mode
+      required: true
+      selector:
+        select:
+          options:
+            - Electric
+            - Vacation
+            - Guest
+    days:
+      name: Days
+      required: true
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          mode: box

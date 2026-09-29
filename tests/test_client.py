@@ -82,6 +82,9 @@ class FakePeripheral:
                     self.send(reply(0x02, status=0x10))
                     return
                 register = tuple(data[3:5])
+                if register not in self.registers:
+                    self.send(reply(0x02, status=1))
+                    return
                 # An unrelated valid frame must not satisfy the read.
                 self.send(reply(0x02, b"\x01\x01\x00\x00"))
                 self.send(reply(0x02, data[3:5] + self.registers[register].to_bytes(2, "big")))
@@ -173,3 +176,63 @@ async def test_enrollment_only_when_requested_and_diagnostics_redacted(client, p
     assert "9c6f" not in diag
     digest = hmac.new(bytes.fromhex("9C6F"), IDENTIFIER.encode(), hashlib.sha1).hexdigest()
     assert digest not in diag
+
+
+async def test_optional_rejection_preserves_core_and_can_retry(client, peripheral):
+    client.optional_registers = {"vacation_days": (11, 17), "cta_present": (27, 25)}
+    peripheral.registers[(27, 25)] = 1
+    state = await client.read_state()
+    assert state.mode == 4
+    assert state.registers == {"cta_present": 1}
+    assert (11, 17) in client.unsupported_registers
+    peripheral.registers[(11, 17)] = 7
+    assert "vacation_days" not in (await client.read_state()).registers
+    result = await client.inspect_registers(client.optional_registers)
+    assert result["registers"]["vacation_days"]["raw"] == 7
+    assert result["registers"]["vacation_days"]["hex"] == "0007"
+    assert (await client.read_state()).registers["vacation_days"] == 7
+    assert not any(p[1] == 0x40 for p in peripheral.writes if p[0] == 0xBD)
+
+
+async def test_optional_timeout_keeps_core_and_stops_capture(client, peripheral):
+    from unittest.mock import AsyncMock
+
+    client.optional_registers = {"vacation_days": (11, 17), "cta_present": (27, 25)}
+    original = client._read
+
+    async def read(register):
+        if register == (11, 17):
+            raise TimeoutError
+        return await original(register)
+
+    client._read = AsyncMock(side_effect=read)
+    state = await client.read_state()
+    assert state.target_temperature == 125
+    assert state.registers == {}
+    assert not client.diagnostics()["connected"]
+    assert client.optional_errors["vacation_days"] == "TimeoutError"
+    assert (27, 25) not in [call.args[0] for call in client._read.call_args_list]
+    peripheral.registers[(27, 25)] = 1
+    client._read.reset_mock()
+    state = await client.read_state()
+    assert state.registers == {"cta_present": 1}
+    assert (11, 17) not in [call.args[0] for call in client._read.call_args_list]
+
+
+async def test_timed_mode_retains_duration_and_uses_single_write(client, peripheral):
+    from custom_components.aosmith_ble.protocol import encode_timed_mode
+
+    state = await client.set_value(MODE, encode_timed_mode("Vacation", 7))
+    assert state.mode == 2
+    assert state.mode_days == 7
+    assert len([p for p in peripheral.writes if p[0] == 0xBD and p[1] == 0x40]) == 1
+
+
+async def test_hot_water_plus_checks_fresh_mode_before_write(client, peripheral):
+    from custom_components.aosmith_ble.const import HOT_WATER_PLUS
+
+    peripheral.registers[HOT_WATER_PLUS] = 0
+    peripheral.registers[MODE] = 0x6402
+    with pytest.raises(ProtocolError, match="requires Electric"):
+        await client.set_value(HOT_WATER_PLUS, 1)
+    assert not any(p[1] == 0x40 for p in peripheral.writes if p[0] == 0xBD)

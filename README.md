@@ -1,4 +1,4 @@
-# AO Smith Local BLE — experimental 0.1.1
+# AO Smith Local BLE — experimental 0.2.0
 
 Local Bluetooth integration for Home Assistant. No AO Smith account, password,
 cloud API, or internet request is used by the integration at runtime.
@@ -17,8 +17,9 @@ The owner confirmed authentication, setpoint/mode reads, water availability,
 fault reads, and a Hybrid → Heat Pump → Hybrid change using nRF Connect.
 
 The owner has now run this integration in Home Assistant for 30 minutes with
-working controls and temperature status. Reconnect/restart recovery and a
-physical-display check of temperature writes remain unverified. It is
+working controls and temperature status. The owner also verified a 125→124→125°F
+setpoint change on the physical display, the Reconnect button, and reconnection
+after restarting Home Assistant, both without touching the heater. It is
 designed for other heaters using the same next-generation iCOMM register map.
 An ICOMM advertisement alone does **not** establish compatibility. Older heat
 pump models use different registers and are not supported by this release.
@@ -31,21 +32,67 @@ pump models use different registers and are not supported by this release.
 - Automatic challenge authentication on connection; renews expired sessions when
   a read returns the known session-expired response.
 - 30-second polling (configurable 15–300 seconds).
-- Water heater entity: target temperature and mode, with Electric, Hybrid and
-  Heat Pump controls. Vacation/Guest are readable but their duration controls are
-  deferred.
-- Setpoint writing can be enabled in Options for hardware testing; it is disabled
-  by default because the encoding is APK-derived but a temperature write has not
-  yet been tested. Initial allowed range is 95–140°F; readback verifies the result.
-- Separate temperature-setpoint, raw hot-water availability and fault-register sensors.
-- Refresh and Reconnect diagnostic buttons.
-- Redacted downloadable diagnostics with the last 60 protocol events.
+- Water heater entity with Electric, Hybrid, Heat Pump, Vacation and Guest modes.
+  Vacation selection means **on until changed**; Guest selection means **one day**.
+- Explicit **Set timed mode** action: Electric 1–99 days, Vacation 1–99 days or
+  100 for continuously on, and Guest 1–7 days. These duration controls are
+  APK-derived and awaiting hardware validation.
+- Temperature controls default on for new setups (95–140°F), with register
+  readback. An existing explicit off preference is preserved. A readable device
+  maximum can reduce the UI limit; it never raises the 140°F ceiling.
+- Separate temperature-setpoint, raw availability, fault-register and fault-present sensors.
+- Optional device maximum/remote-setpoint registers, remaining-days readings,
+  utility-module presence, demand-response pause, advanced-load-up and enrollment flags.
+- Opt-in utility switches and Hot Water Plus levels Off/1/2/3 on supported models.
+- Refresh, Reconnect and **Inspect extended registers** diagnostic buttons.
+- Redacted downloadable diagnostics, a timestamped extended-register capture,
+  and the last 60 protocol events.
 - Existing device pairings are never deleted. Routine reconnects never enroll keys.
 
 Actual tank temperature, compressor state, fault descriptions, energy kWh, and
 utility-rate programming are not yet implemented. The setpoint is not presented
 as measured tank temperature. Availability value 5 was observed; the proposed
-0–5 → 0–100% conversion remains unverified and is not applied.
+0–5 → 0–100% conversion remains unverified and is not applied. See
+[FEATURES.md](FEATURES.md) for the full app-feature inventory and evidence gaps.
+
+## New controls in 0.2.0
+
+Update the HACS download and restart Home Assistant. Keep your existing entry
+and pairing. If HACS does not offer an update yet, use its Redownload action for
+this custom repository's main branch. Confirm version **0.2.0** in diagnostics.
+
+**Settings → Devices & services → AO Smith Local BLE → Configure** offers:
+
+- **Read remaining days and utility status** (default on): queries named registers
+  only. Rejected registers do not break temperature/mode polling; transport failures
+  stop the optional batch and back off that register for ten minutes. Inspect
+  retries immediately. Turn this off if a model has trouble with extended polling.
+- **Enable experimental utility controls** (default off): Pause utility demand
+  response, Advanced load-up, and Utility enrollment device flag. These only write
+  the heater's flags; they do not register an account, enroll a utility contract,
+  or set a tariff. Record original values before testing and restore afterward.
+- **Enable Hot Water Plus** (default off): enable only if your heater offers it in
+  iCOMM. The APK restricts this to the next-generation BEST family. An unsupported
+  register reading as zero is not proof of feature support. Boost requires Electric,
+  Hybrid or Heat Pump mode; the integration rechecks the live mode before writing.
+
+For custom duration, open **Developer tools → Actions → AO Smith Local BLE: Set
+ timed mode**, select your integration entry, mode and days. The same action is
+available in automations. The device owns its countdown; HA does not emulate it.
+Changing back to Hybrid or Heat Pump exits a timed mode. Native Electric selection
+retains the previously verified zero-duration encoding.
+
+```yaml
+action: aosmith_ble.set_timed_mode
+data:
+  config_entry_id: YOUR_LOCAL_INTEGRATION_ENTRY_ID
+  mode: Vacation
+  days: 7
+```
+
+The duration sensors retain the raw low-byte value: 100 may be the app's **On**
+sentinel, so they are not advertised as elapsed-time measurements. Utility and
+remaining-days controls/readings still need confirmation on real devices.
 
 ## Installation
 
@@ -86,8 +133,8 @@ If pair storage is full, this integration stops; it does not delete someone else
 
 ## Temperature panel
 
-The water-heater temperature editor appears after enabling **Options → Enable
-experimental setpoint writes**. This is the native water-heater UI; a separate
+The water-heater temperature editor is enabled by default. If it was previously
+disabled, enable **Configure → Enable temperature controls**. This is the native water-heater UI; a separate
 climate/thermostat entity is not required. The **Temperature setpoint** sensor
 shows the setting even while writes are disabled. It is not tank temperature.
 
@@ -111,6 +158,19 @@ When replacing Python files during development, restart HA to guarantee new code
 is imported. A configuration-entry Reload can reconnect an existing loaded
 version but is not a reliable code hot-reload. Later HACS releases will make
 updates simpler. Do not reinstall or recreate pairing for each update.
+
+## Extended-register capture for energy research
+
+1. Press **Inspect extended registers** on the integration's device page.
+2. Wait for the action to finish, then **Download diagnostics**.
+3. Note the time, active mode, whether the heater was heating, and any available
+   app energy reading with its timestamp. If practical, repeat after a heating cycle.
+
+The capture includes raw 16-bit words for the APK's `OADR_ELECTRIC_POWER_USAGE`,
+`OADR_GRID_PRESENT_ENERGY_LEVEL` and `OADR_GRID_TOTAL_ENERGY_LEVEL` groups. They
+are intentionally not presented as watts, kWh or a lifetime meter yet. The capture
+is read-only, contains a timestamp and per-register results, and clears on reload.
+Capture/normal polling share one request queue. Pairing material is omitted.
 
 ## Hardware acceptance checklist
 
@@ -137,7 +197,7 @@ do not contact a heater. See `PROTOCOL.md` for the implementation assumptions.
 
 ## Roadmap
 
-1. Hardware-test HA authentication, proxy transport, timeout recovery and setpoint writes.
+1. Validate new timed modes/optional features and proxy transport on real hardware.
 2. Publish tagged releases after hardware testing; accept model/firmware
    reports without collecting credentials.
 3. Add explicit protocol profiles for additional models, backed by captures/tests.

@@ -85,3 +85,23 @@ def test_fragmentation_concatenation_and_bad_crc_recovery():
 def test_identifier_validation(identifier):
     with pytest.raises(ValueError):
         validate_identifier(identifier)
+
+
+@pytest.mark.parametrize(
+    "mode,days,expected", [("Vacation", 100, 0x6402), ("Guest", 7, 0x0703), ("Electric", 99, 0x6301)]
+)
+def test_timed_modes(mode, days, expected):
+    from custom_components.aosmith_ble.protocol import encode_timed_mode
+
+    assert encode_timed_mode(mode, days) == expected
+
+
+@pytest.mark.parametrize(
+    "mode,days",
+    [("Guest", 8), ("Vacation", 0), ("Electric", 100), ("Hybrid", 1), ("Vacation", 1.5), ("Guest", True)],
+)
+def test_invalid_timed_modes(mode, days):
+    from custom_components.aosmith_ble.protocol import encode_timed_mode
+
+    with pytest.raises(ValueError):
+        encode_timed_mode(mode, days)

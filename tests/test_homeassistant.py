@@ -27,7 +27,7 @@ def coordinator():
 
 
 async def test_entity_and_temperature_option(coordinator):
-    heater = Heater(coordinator, SimpleNamespace(options={}))
+    heater = Heater(coordinator, SimpleNamespace(options={"enable_setpoint_writes": False}))
     assert heater.target_temperature == 125
     assert heater.current_temperature is None
     assert heater.current_operation == "Hybrid"
@@ -42,7 +42,7 @@ async def test_entity_and_temperature_option(coordinator):
     with pytest.raises(HomeAssistantError):
         await heater.async_set_temperature(temperature=200)
     with pytest.raises(HomeAssistantError):
-        await heater.async_set_operation_mode("Vacation")
+        await heater.async_set_operation_mode("Unknown")
 
 
 def test_sensors_preserve_raw_units(coordinator):
@@ -205,3 +205,108 @@ async def test_diagnostics_do_not_dump_entry_credentials(tmp_path, coordinator):
     assert coordinator.address not in text
     assert diagnostics["state"]["target_temperature"] == 125
     await hass.async_stop()
+
+
+async def test_default_temperature_controls_and_timed_selection(coordinator):
+    heater = Heater(coordinator, SimpleNamespace(options={}))
+    assert heater.supported_features & WaterHeaterEntityFeature.TARGET_TEMPERATURE
+    await heater.async_set_operation_mode("Vacation")
+    coordinator.async_set_value.assert_awaited_with(MODE, 0x6402)
+    await heater.async_set_operation_mode("Guest")
+    coordinator.async_set_value.assert_awaited_with(MODE, 0x0103)
+    assert heater.current_temperature is None
+    coordinator.data = HeaterState(125, 4, 5, 0, registers={"maximum_setpoint": 0x33AB})
+    assert heater.max_temp == 125
+    with pytest.raises(HomeAssistantError):
+        await heater.async_set_temperature(temperature=126)
+
+
+async def test_timed_mode_service_targets_only_selected_heater(tmp_path, coordinator):
+    from custom_components.aosmith_ble.services import async_register_services
+
+    hass = HomeAssistant(str(tmp_path))
+    other = SimpleNamespace(async_set_value=AsyncMock())
+    hass.data[DOMAIN] = {"first": coordinator, "other": other}
+    async_register_services(hass)
+    await hass.services.async_call(
+        DOMAIN, "set_timed_mode", {"config_entry_id": "first", "mode": "Vacation", "days": 7}, blocking=True
+    )
+    coordinator.async_set_value.assert_awaited_once_with(MODE, 0x0702)
+    other.async_set_value.assert_not_awaited()
+    for data in [
+        {"config_entry_id": "first", "mode": "Guest", "days": 8},
+        {"config_entry_id": "missing", "mode": "Vacation", "days": 7},
+    ]:
+        with pytest.raises(HomeAssistantError):
+            await hass.services.async_call(DOMAIN, "set_timed_mode", data, blocking=True)
+    assert coordinator.async_set_value.await_count == 1
+    await hass.async_stop()
+
+
+async def test_optional_entities_handle_missing_data_and_exact_values(coordinator):
+    from custom_components.aosmith_ble.binary_sensor import StatusSensor
+    from custom_components.aosmith_ble.const import ADVANCED_LOAD, HOT_WATER_PLUS
+    from custom_components.aosmith_ble.select import HotWaterPlus
+    from custom_components.aosmith_ble.sensor import ExtendedSensor
+    from custom_components.aosmith_ble.switch import UtilitySwitch
+
+    switch = UtilitySwitch(coordinator, "advanced_load")
+    boost = HotWaterPlus(coordinator)
+    sensor = ExtendedSensor(coordinator, "vacation_days")
+    flag = StatusSensor(coordinator, "cta_present")
+    for entity in [switch, boost, sensor, flag]:
+        assert not entity.available
+    assert boost.current_option is None
+    assert flag.is_on is None
+    with pytest.raises(HomeAssistantError):
+        await switch.async_turn_on()
+    coordinator.data = HeaterState(
+        125,
+        4,
+        5,
+        0,
+        registers={"advanced_load": 0xA5, "hot_water_plus": 2, "vacation_days": 100, "cta_present": 1},
+    )
+    assert switch.is_on is True
+    assert boost.current_option == "Level 2"
+    assert flag.is_on is True
+    assert sensor.native_value == 100 and sensor.native_unit_of_measurement is None
+    await switch.async_turn_on()
+    coordinator.async_set_value.assert_awaited_with(ADVANCED_LOAD, 0xA5)
+    await switch.async_turn_off()
+    coordinator.async_set_value.assert_awaited_with(ADVANCED_LOAD, 0)
+    await boost.async_select_option("Level 3")
+    coordinator.async_set_value.assert_awaited_with(HOT_WATER_PLUS, 3)
+    coordinator.data = HeaterState(125, 2, 5, 0, registers={"hot_water_plus": 2})
+    with pytest.raises(HomeAssistantError):
+        await boost.async_select_option("Off")
+
+
+async def test_optional_platforms_respect_model_options(tmp_path, coordinator):
+    from custom_components.aosmith_ble import select, switch
+
+    hass = HomeAssistant(str(tmp_path))
+    hass.data[DOMAIN] = {"test": coordinator}
+    entities = []
+    entry = SimpleNamespace(entry_id="test", options={})
+    await select.async_setup_entry(hass, entry, entities.extend)
+    await switch.async_setup_entry(hass, entry, entities.extend)
+    assert entities == []
+    entry.options = {"enable_hot_water_plus": True, "enable_utility_controls": True}
+    await select.async_setup_entry(hass, entry, entities.extend)
+    await switch.async_setup_entry(hass, entry, entities.extend)
+    assert len(entities) == 4
+    assert len({entity.unique_id for entity in entities}) == 4
+    await hass.async_stop()
+
+
+def test_action_ui_selectors_validate_with_minimum_ha_version():
+    from pathlib import Path
+
+    import yaml
+    from homeassistant.helpers.selector import selector
+
+    description = yaml.safe_load(Path("custom_components/aosmith_ble/services.yaml").read_text())
+    fields = description["set_timed_mode"]["fields"]
+    for field in fields.values():
+        selector(field["selector"])

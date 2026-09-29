@@ -5,7 +5,21 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from .const import DOMAIN
 from .coordinator import HeaterCoordinator
 
-PLATFORMS = [Platform.WATER_HEATER, Platform.SENSOR, Platform.BUTTON]
+PLATFORMS = [
+    Platform.WATER_HEATER,
+    Platform.SENSOR,
+    Platform.BUTTON,
+    Platform.BINARY_SENSOR,
+    Platform.SWITCH,
+    Platform.SELECT,
+]
+
+
+async def async_setup(hass, config):
+    from .services import async_register_services
+
+    async_register_services(hass)
+    return True
 
 
 async def async_setup_entry(hass, entry):
