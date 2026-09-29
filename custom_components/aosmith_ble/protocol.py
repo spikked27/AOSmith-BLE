@@ -95,6 +95,20 @@ def decode_temperature(raw: int) -> float:
     return round(raw / 256 * 1.8 + 32, 1)
 
 
+def decode_availability(raw: int, scale: str) -> int | None:
+    """Apply only the explicitly selected scale; never infer one from a single byte."""
+    if type(raw) is not int:
+        return None
+    if scale == "five_levels" and 0 <= raw <= 5:
+        return raw * 20
+    if 0 <= raw <= 100:
+        if scale == "percent_remaining":
+            return raw
+        if scale == "percent_used":
+            return 100 - raw
+    return None
+
+
 def encode_temperature(fahrenheit: float) -> int:
     if not math.isfinite(fahrenheit):
         raise ValueError("Temperature must be finite")

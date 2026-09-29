@@ -31,6 +31,11 @@ class DebugButton(HeaterEntity, ButtonEntity):
         }[action]
         self._attr_icon = "mdi:refresh" if action == "refresh" else "mdi:bluetooth-connect"
 
+    @property
+    def available(self):
+        # Recovery actions must remain usable after a failed poll/disconnect.
+        return True
+
     async def async_press(self):
         if self.action == "inspect":
             await self.coordinator.async_inspect_registers()

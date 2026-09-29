@@ -22,6 +22,7 @@ def coordinator():
         address="AA:BB:CC:DD:EE:FF",
         data=HeaterState(125, 4, 5, 0),
         last_update_success=True,
+        options={},
         async_set_value=AsyncMock(),
     )
 
@@ -47,8 +48,9 @@ async def test_entity_and_temperature_option(coordinator):
 
 def test_sensors_preserve_raw_units(coordinator):
     availability = HeaterSensor(coordinator, "availability")
-    assert availability.native_value == 5
-    assert availability.native_unit_of_measurement is None
+    assert availability.native_value is None
+    assert availability.native_unit_of_measurement == "%"
+    assert availability.extra_state_attributes["raw_value"] == 5
     assert HeaterSensor(coordinator, "fault").native_value == 0
     setpoint = HeaterSensor(coordinator, "target_temperature")
     assert setpoint.native_value == 125
@@ -353,3 +355,48 @@ async def test_upgrade_retires_only_owned_demand_response_entities(tmp_path):
         "switch.retired", disabled_by=er.RegistryEntryDisabler.INTEGRATION
     )
     await hass.async_stop()
+
+
+@pytest.mark.parametrize(
+    "scale,expected", [("five_levels", 100), ("percent_used", 95), ("percent_remaining", 5)]
+)
+def test_availability_scale_is_explicit_and_keeps_raw_value(coordinator, scale, expected):
+    coordinator.options = {"availability_scale": scale}
+    sensor = HeaterSensor(coordinator, "availability")
+    assert sensor.native_value == expected
+    assert sensor.native_unit_of_measurement == "%"
+    assert sensor.extra_state_attributes["raw_value"] == 5
+    assert sensor.unique_id == coordinator.address + "_availability"
+    assert sensor.state_class is None
+
+
+async def test_reconnect_button_is_usable_when_heater_is_unavailable(coordinator):
+    import asyncio
+
+    from custom_components.aosmith_ble.button import DebugButton
+
+    coordinator.last_update_success = False
+    coordinator.command_lock = asyncio.Lock()
+    coordinator.client = SimpleNamespace(disconnect=AsyncMock())
+    coordinator.async_request_refresh = AsyncMock()
+    button = DebugButton(coordinator, "reconnect")
+    assert button.available
+    await button.async_press()
+    coordinator.client.disconnect.assert_awaited_once()
+    coordinator.async_request_refresh.assert_awaited_once()
+
+
+async def test_vacation_hides_temperature_editor_and_rejects_temperature_writes(coordinator):
+    heater = Heater(coordinator, SimpleNamespace(options={}))
+    coordinator.data = HeaterState(125, 2, 5, 0)
+    assert not heater.supported_features & WaterHeaterEntityFeature.TARGET_TEMPERATURE
+    with pytest.raises(HomeAssistantError, match="Leave Vacation"):
+        await heater.async_set_temperature(temperature=120)
+    coordinator.async_set_value.assert_not_awaited()
+    await heater.async_set_operation_mode("Hybrid")
+    coordinator.async_set_value.assert_awaited_once_with(MODE, 4)
+    coordinator.data = HeaterState(125, 4, 5, 0)
+    assert heater.supported_features & WaterHeaterEntityFeature.TARGET_TEMPERATURE
+    for invalid in (None, "invalid", float("nan")):
+        with pytest.raises(HomeAssistantError):
+            await heater.async_set_temperature(temperature=invalid)

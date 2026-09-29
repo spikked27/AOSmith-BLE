@@ -1,10 +1,11 @@
-"""Raw availability and fault values without unverified unit conversions."""
+"""User-facing readings and optional raw diagnostics."""
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
-from homeassistant.const import EntityCategory, UnitOfEnergy, UnitOfTemperature
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfEnergy, UnitOfTemperature
 
 from .const import DOMAIN
 from .entity import HeaterEntity
+from .protocol import decode_availability
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -27,9 +28,14 @@ class HeaterSensor(HeaterEntity, SensorEntity):
         self.key = key
         self._attr_name = {
             "target_temperature": "Temperature setpoint",
-            "availability": "Hot water availability level",
+            "availability": "Hot water availability",
             "fault": "Fault register",
         }[key]
+        if key == "availability":
+            self._attr_native_unit_of_measurement = PERCENTAGE
+            self._attr_suggested_display_precision = 0
+            # No state_class: changing calibration must not combine incompatible statistics.
+            self.scale = coordinator.options.get("availability_scale", "unverified")
         self._attr_icon = {
             "target_temperature": "mdi:thermometer",
             "availability": "mdi:water",
@@ -47,6 +53,8 @@ class HeaterSensor(HeaterEntity, SensorEntity):
 
     @property
     def native_value(self):
+        if self.key == "availability":
+            return decode_availability(self.coordinator.data.availability, self.scale)
         return getattr(self.coordinator.data, self.key)
 
     @property
@@ -54,7 +62,12 @@ class HeaterSensor(HeaterEntity, SensorEntity):
         if self.key == "target_temperature":
             return None
         if self.key == "availability":
-            return {"scale": "raw device level; percentage mapping unverified"}
+            return {
+                "raw_value": self.coordinator.data.availability,
+                "scale": self.scale,
+                "calibration": "Select the scale in Configure after comparing with iCOMM",
+                "estimated": self.scale == "five_levels",
+            }
         return {"raw_hex": f"{self.coordinator.data.fault:04X}"}
 
 

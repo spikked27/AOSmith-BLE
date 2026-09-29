@@ -73,3 +73,13 @@ No intentional power interruption is needed for these first checks. Schedule
 programming, clock synchronization, price-based control and cost calculation
 remain unimplemented until the relevant evidence is available. Demand-response
 enrollment/control remains out of scope.
+
+
+## Hardware capture result — September 28, 2026
+
+Two captures approximately four minutes apart returned zero for both clock
+candidate words with successful ACKs. That does not establish a running clock:
+these could be unset values or an inapplicable register map. Clock writes remain
+unimplemented; repeated reads of the same two zero words are not a validation
+plan. The next step is to identify the next-generation clock source and format.
+The saved PSEG 195 cache and the grouped 350.532 kWh read were present and valid.

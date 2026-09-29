@@ -1,3 +1,15 @@
+# 0.3.1 — availability calibration and recovery fixes
+
+- Replace the unlabeled raw availability display with a percentage entity and
+  per-heater scale selection. Default is unknown until calibrated; retain the
+  raw byte and existing entity ID. Five-level mapping is clearly provisional.
+- Keep Refresh/Reconnect/Inspect usable when a poll fails.
+- Ignore stale BLE callbacks from closed connections, including a reused client object.
+- Match the app's Vacation behavior: hide setpoint controls and reject temperature
+  writes after checking the live mode. Return useful errors for invalid inputs.
+- Add the owner's confirmed grouped energy response as a credential-free fixture.
+- Record zero-valued clock-candidate captures as unresolved, not verified.
+
 # 0.3.0 — tariff preview and entity cleanup
 
 - Optional anonymous ZIP/utility/tariff lookup with confirmation, validated cache,

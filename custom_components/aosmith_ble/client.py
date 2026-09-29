@@ -62,6 +62,7 @@ class HeaterClient:
         self._connector = connector
         self._client = None
         self._authenticated = False
+        self._notification_session = None
         self._lock = asyncio.Lock()
         self._pending = None
         self._matcher = None
@@ -151,7 +152,14 @@ class HeaterClient:
             # PIN is six ASCII bytes, NOT hexadecimal and NOT a framed command.
             async with asyncio.timeout(self._timeout):
                 await self._client.write_gatt_char(WRITE_UUID, self.pin.encode("ascii"), response=True)
-                await self._client.start_notify(NOTIFY_UUID, self._notification)
+                session_client = self._client
+                self._notification_session = session = object()
+
+                def notification(sender, data):
+                    if self._notification_session is session:
+                        self._notification(sender, data)
+
+                await session_client.start_notify(NOTIFY_UUID, notification)
 
     async def _ensure_session(self):
         await self._ensure_connection()
@@ -175,6 +183,7 @@ class HeaterClient:
     async def _close(self):
         client, self._client = self._client, None
         self._authenticated = False
+        self._notification_session = None
         self._buffer = FrameBuffer()
         if client is not None and client.is_connected:
             try:
@@ -305,6 +314,8 @@ class HeaterClient:
                 await self._ensure_session()
                 # Read first: renew an expired session before issuing a mutation.
                 await self._read(register)
+                if register == SETPOINT and (await self._read(MODE) & 0xFF) == 2:
+                    raise ProtocolError("Leave Vacation mode before changing the temperature")
                 if register == HOT_WATER_PLUS and (await self._read(MODE) & 0xFF) not in (1, 4, 5):
                     raise ProtocolError("Hot Water Plus requires Electric, Hybrid or Heat pump mode")
                 await asyncio.sleep(self._spacing)

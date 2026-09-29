@@ -73,13 +73,14 @@
       },
       "settings": {
         "title": "Controls and readings",
-        "description": "Core controls remain local. Energy is read over Bluetooth. Enable Hot Water Plus only if your heater offers it in iCOMM.",
+        "description": "Core controls remain local. Energy is read over Bluetooth. Enable Hot Water Plus only if your heater offers it in iCOMM. Calibrate availability by comparing its raw_value attribute with iCOMM before selecting a scale. Five levels is an estimate, not a verified capacity measurement. Until calibrated, the percentage is unknown.",
         "data": {
           "poll_interval": "Polling interval (seconds)",
           "enable_setpoint_writes": "Enable temperature controls (95–140°F)",
           "extended_readings": "Read remaining days and setpoint diagnostics",
           "enable_hot_water_plus": "Enable Hot Water Plus (supported models only)",
-          "energy_readings": "Read cumulative energy usage"
+          "energy_readings": "Read cumulative energy usage",
+          "availability_scale": "Hot-water availability scale"
         }
       },
       "tariff": {

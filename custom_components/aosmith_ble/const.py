@@ -19,7 +19,13 @@ FAULT = (2, 7)
 MIN_TEMP_F = 95
 MAX_TEMP_F = 140
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
+AVAILABILITY_SCALES = {
+    "unverified": "Not calibrated",
+    "five_levels": "0–5 levels (estimated 20% steps)",
+    "percent_remaining": "0–100 percent remaining",
+    "percent_used": "0–100 percent used (inverted)",
+}
 ENERGY = (27, 7)
 MAX_SETPOINT = (1, 43)
 REMOTE_SETPOINT = (11, 6)

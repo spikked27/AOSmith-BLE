@@ -14,7 +14,7 @@ heat pumps, electric, gas, tankless and recirculation products with other maps.
 | Advanced load-up flag | Removed from product scope | Separate from future tariff preheating |
 | Utility enrollment device flag | Removed from product scope | No account enrollment |
 | Remaining days | Optional diagnostic sensors | Firmware-specific sentinels and availability |
-| Hot-water availability | Implemented raw level | Percentage mapping not established |
+| Hot-water availability | Percent entity with explicit calibration; raw attribute retained | Verify the scale against iCOMM at more than one level |
 | Fault status | Raw code and fault-present entity | Model-specific code descriptions |
 | Energy use and history | Local cumulative kWh sensor | Heating-cycle delta, reset behavior and other models |
 | Actual tank temperature / running components | No confirmed local mapping | Telemetry source and units |

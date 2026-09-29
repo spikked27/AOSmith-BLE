@@ -11,7 +11,15 @@ from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import CONF_IDENTIFIER, CONF_INTERVAL, CONF_PIN, DEFAULT_INTERVAL, DOMAIN, SERVICE_UUID
+from .const import (
+    AVAILABILITY_SCALES,
+    CONF_IDENTIFIER,
+    CONF_INTERVAL,
+    CONF_PIN,
+    DEFAULT_INTERVAL,
+    DOMAIN,
+    SERVICE_UUID,
+)
 from .coordinator import make_client
 from .protocol import ProtocolError, StatusError, validate_identifier
 from .tariff import TariffError, TariffLookup, cache_plan
@@ -228,6 +236,10 @@ class OptionsFlow(config_entries.OptionsFlow):
             step_id="settings",
             data_schema=vol.Schema(
                 {
+                    vol.Required(
+                        "availability_scale",
+                        default=self.config_entry.options.get("availability_scale", "unverified"),
+                    ): vol.In(AVAILABILITY_SCALES),
                     vol.Required(
                         CONF_INTERVAL, default=self.config_entry.options.get(CONF_INTERVAL, DEFAULT_INTERVAL)
                     ): vol.All(vol.Coerce(int), vol.Range(min=15, max=300)),

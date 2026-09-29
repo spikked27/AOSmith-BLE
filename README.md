@@ -1,4 +1,4 @@
-# AO Smith Local BLE — experimental 0.3.0
+# AO Smith Local BLE — experimental 0.3.1
 
 Local Bluetooth integration for Home Assistant. No AO Smith account, password,
 or Internet is needed for heater control. Optional tariff lookup contacts AO Smith’s
@@ -43,7 +43,9 @@ pump models use different registers and are not supported by this release.
   maximum can reduce the UI limit; it never raises the 140°F ceiling.
 - Cumulative **Energy usage** in kWh, suitable for HA energy statistics. The observed
   350.532 kWh agrees with the owner’s approximately 350 kWh app reading.
-- Raw availability and fault-present status. Duplicate setpoint/raw fault and
+- Percentage availability with explicitly selected scale and fault-present status.
+  Until calibrated the percentage is unknown; the raw byte remains in attributes.
+  Duplicate setpoint/raw fault and
   extended register sensors are diagnostic and disabled by default for new entries.
   Existing entity IDs, history and user enable/disable choices are preserved.
 - Optional remaining-days/setpoint diagnostics and model-specific Hot Water Plus.
@@ -58,18 +60,18 @@ pump models use different registers and are not supported by this release.
 
 Actual tank temperature, compressor state, fault descriptions, clock synchronization,
 and utility-rate programming are not yet implemented. The setpoint is not presented
-as measured tank temperature. Availability value 5 was observed; the proposed
-0–5 → 0–100% conversion remains unverified and is not applied. See
+as measured tank temperature. Availability value 5 was observed. A five-level percentage estimate is now an
+explicit option; it is not assumed for every heater. See calibration below. See
 [FEATURES.md](FEATURES.md) for the full app-feature inventory and evidence gaps.
 
-## Update to 0.3.0
+## Update to 0.3.1
 
 Redownload the main branch in HACS and restart Home Assistant. Keep your existing
-entry and pairing. Confirm version **0.3.0** in diagnostics.
+entry and pairing. Confirm version **0.3.1** in diagnostics.
 
 **Settings → Devices & services → AO Smith Local BLE → Configure** now offers:
 
-- **Controls and readings**: polling interval, temperature writes, energy reads,
+- **Controls and readings**: availability scale, polling interval, temperature writes, energy reads,
   extended diagnostic reads and model-specific Hot Water Plus.
 - **Look up or replace a utility tariff**: enter a US ZIP, choose a utility and
   complete tariff, then confirm the local preview. ZIP is sent to the lookup
@@ -146,12 +148,40 @@ with the same identifier instead of repeatedly enrolling it. If you abandon that
 flow, preserve the displayed identifier and try the Existing pairing option.
 If pair storage is full, this integration stops; it does not delete someone else's key.
 
+## Hot-water availability calibration
+
+The normal entity is **Hot water availability** in percent. The raw Bluetooth
+value is retained in its `raw_value` attribute and diagnostics. Its unique ID
+is unchanged; pre-upgrade raw history is not rewritten into percentages.
+
+Use **Configure → Controls and readings → Hot-water availability scale**:
+
+| Selection | Mapping | Raw 5 displays |
+|---|---|---|
+| Not calibrated (default) | No assumed conversion | Unknown; raw_value remains 5 |
+| 0–5 levels | Estimated 20% per level | 100% |
+| 0–100 percent remaining | Direct percentage | 5% |
+| 0–100 percent used | Invert the percentage | 95% |
+
+Choose a scale only after comparing with iCOMM, preferably both before and after
+normal hot-water use. The APK exposes the BLE low byte without a percentage
+conversion. The cloud client instead inverts its numeric API field, so a cloud
+mapping cannot be blindly applied to BLE. Five-level conversion is provisional,
+not a measurement of gallons or tank temperature. Values outside the selected
+scale become unknown rather than being clamped to a misleading 0% or 100%.
+No cross-calibration long-term statistics are generated for this sensor.
+
 ## Temperature panel
 
 The water-heater temperature editor is enabled by default. If it was previously
 disabled, enable **Configure → Enable temperature controls**. This is the native water-heater UI; a separate
 climate/thermostat entity is not required. The **Temperature setpoint** sensor
 shows the setting even while writes are disabled. It is not tank temperature.
+Vacation mode hides the temperature editor; both UI and transport require leaving
+Vacation before changing setpoint. Mode selection remains available.
+
+Recovery buttons remain available after failed polls so you can retry a disconnected
+heater. Late notifications from closed sessions are discarded.
 
 ## Fast development/debug loop
 

@@ -116,3 +116,21 @@ cache. No schedule, clock, preference or enrollment writes occur on selection.
 Manual inspection includes candidate clock words 26:3–4 from the older-profile
 APK clock writer; their meaning on next-generation heaters remains unverified.
 See TARIFF.md for the full list of pending protocol/hardware checks.
+
+
+## 0.3.1 availability and clock evidence
+
+The next-generation WATER_AVAILABLE parser in iCOMM module 1422 returns the
+low byte of 27:23 unchanged. It does not establish a 0–5 percentage scale. The
+public cloud client uses a different numeric convention (`100 - hotWaterStatus`):
+https://github.com/bdr99/py-aosmith/blob/8d4eb7f1b75e1898227810ff9d007d8fd3291434/py_aosmith/client.py
+Neither path proves that the two fields share a scale. Thus the integration
+requires explicit per-entry calibration. The 0–5 conversion is offered as an
+estimate, not silently selected as a device fact. Out-of-range bytes never
+produce a fabricated percentage; raw bytes remain available for investigation.
+
+The owner’s 0.3.0 captures confirm request BDA0071B0703D8 and response
+DB020D1B0700000005594480F0 for the 48-bit energy counter. A credential-free
+fixture verifies this exact grouped response. Candidate clock words 26:3 and
+26:4 both remain zero at two captures about four minutes apart. A successful
+read ACK alone does not confirm register meaning or support for clock writes.

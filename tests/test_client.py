@@ -267,3 +267,29 @@ async def test_unavailable_energy_does_not_publish_zero_or_break_controls(client
     state = await client.read_state()
     assert "energy_wh" not in state.registers
     assert state.target_temperature == 125
+
+
+async def test_notifications_from_closed_session_are_ignored(client, peripheral):
+    await client.read_state()
+    previous_callback = peripheral.notify
+    await client.disconnect()
+    await client.read_state()
+    # Inject an old session packet that would match the next register request.
+    original_write = peripheral.write_gatt_char
+
+    async def inject_stale(uuid, data, response):
+        if data[1] == 0xA0 and data[3:5] == bytes((11, 0)):
+            previous_callback(None, reply(0x02, bytes.fromhex("0B00FFFF")))
+        await original_write(uuid, data, response)
+
+    peripheral.write_gatt_char = inject_stale
+    assert (await client.read_state()).target_temperature == 125
+
+
+async def test_temperature_write_rechecks_live_vacation_mode(client, peripheral):
+    from custom_components.aosmith_ble.const import SETPOINT
+
+    peripheral.registers[MODE] = 0x6402
+    with pytest.raises(ProtocolError, match="Leave Vacation"):
+        await client.set_value(SETPOINT, 0x30E4)
+    assert not any(p[1] == 0x40 for p in peripheral.writes if p[0] == 0xBD)

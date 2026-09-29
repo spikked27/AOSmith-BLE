@@ -1,9 +1,9 @@
-# Validation of development preview 0.3.0
+# Validation of development preview 0.3.1
 
 September 29, 2026. Python 3.13.15 and Home Assistant 2025.12.5 with its
 Bluetooth/USB dependencies. Ruff lint and formatting checks pass.
 
-63 automated tests cover captured read packets, exact APK CRC, temperature and
+88 automated tests cover captured read packets, exact APK CRC, temperature and
 timed-mode encoding, synthetic HMAC, framing, authentication/recovery, serialized
 requests, write/readback and uncertain writes without replay. New coverage checks
 optional-register rejection, timeout/backoff without losing core readings, manual
@@ -12,7 +12,10 @@ targeting, optional-entity availability, exact A5 switch encoding, feature optio
 and service UI selectors on the minimum supported HA test runtime. Version 0.3.0
 adds grouped energy reads, invalid/unsupported energy without fabricated zeros,
 tariff HTTP/GraphQL error handling, season/holiday preservation, settings/cache
-isolation, offline preview, and scoped retirement of legacy utility entities.
+isolation, offline preview, and scoped retirement of legacy utility entities. Version 0.3.1 adds explicit
+availability-scale boundaries, raw-value retention, the captured grouped-energy
+reply, offline recovery-button use, obsolete notification rejection and live
+Vacation-mode temperature-write prevention.
 
 One upstream aiohttp/Home Assistant deprecation warning remains during import.
 The tests do not connect to physical BLE hardware.
@@ -26,14 +29,18 @@ Model HPS10-80H45DV, reported firmware 6.4:
 - HA setpoint 125 → 124 → 125°F, checked against the heater's physical display.
 - Reconnect Bluetooth action without pressing the heater Bluetooth button.
 - Automatic reconnection after Home Assistant restart without pressing that button.
+- 0.3.0 grouped three-word energy request/reply: 350.532 kWh.
+- Anonymous PSEG 195 tariff selection persisted with all ten events and holidays.
+- Two successful clock-candidate captures about four minutes apart both read zero;
+  they do not validate clock mapping or synchronization.
 
 ## Still to validate
 
 Version 0.2.0 timed modes, remaining days, utility registers, and Hot Water Plus
 (on supported models) are APK-derived and have not yet been hardware tested.
 The local 350.532 kWh interpretation matches the owner’s approximately 350 kWh
-app value. Grouped reads, heating-cycle deltas and reset behavior still need
-hardware testing. Tariff lookup/cache is implemented; clock synchronization and
+app value. Grouped reads are now hardware confirmed; heating-cycle deltas and reset
+behavior still need testing. Tariff lookup/cache is implemented; clock synchronization and
 on-heater schedule programming remain unimplemented pending validation.
 Discovery retest, additional adapters/proxies/models, multi-slot pairing, long
 radio idle or heater power interruption, and internet-blocked endurance remain

@@ -36,6 +36,13 @@ class Heater(HeaterEntity, WaterHeaterEntity):
     def current_operation(self):
         return MODE_NAMES.get(self.coordinator.data.mode, "Unknown")
 
+    @property
+    def supported_features(self):
+        features = WaterHeaterEntityFeature.OPERATION_MODE
+        if self._setpoint_enabled and self.coordinator.data.mode != 2:
+            features |= WaterHeaterEntityFeature.TARGET_TEMPERATURE
+        return features
+
     async def async_set_operation_mode(self, operation_mode):
         if operation_mode not in MODES:
             raise HomeAssistantError("Unsupported mode")
@@ -48,7 +55,12 @@ class Heater(HeaterEntity, WaterHeaterEntity):
     async def async_set_temperature(self, **kwargs):
         if not self._setpoint_enabled:
             raise HomeAssistantError("Enable setpoint writes in integration options first")
-        temperature = float(kwargs[ATTR_TEMPERATURE])
+        if self.coordinator.data.mode == 2:
+            raise HomeAssistantError("Leave Vacation mode before changing the temperature")
+        try:
+            temperature = float(kwargs[ATTR_TEMPERATURE])
+        except (KeyError, TypeError, ValueError) as err:
+            raise HomeAssistantError("Provide a valid temperature") from err
         if not MIN_TEMP_F <= temperature <= self.max_temp:
             raise HomeAssistantError(f"Choose a temperature from {MIN_TEMP_F} to {self.max_temp} °F")
         await self.coordinator.async_set_value(SETPOINT, encode_temperature(temperature))

@@ -105,3 +105,38 @@ def test_invalid_timed_modes(mode, days):
 
     with pytest.raises(ValueError):
         encode_timed_mode(mode, days)
+
+
+@pytest.mark.parametrize(
+    "raw,scale,expected",
+    [
+        (0, "five_levels", 0),
+        (1, "five_levels", 20),
+        (2, "five_levels", 40),
+        (3, "five_levels", 60),
+        (4, "five_levels", 80),
+        (5, "five_levels", 100),
+        (6, "five_levels", None),
+        (255, "five_levels", None),
+        (-1, "five_levels", None),
+        (0, "percent_used", 100),
+        (100, "percent_used", 0),
+        (101, "percent_used", None),
+        (40, "percent_remaining", 40),
+        (101, "percent_remaining", None),
+        (5, "unverified", None),
+        (5, "unknown_profile", None),
+        (True, "five_levels", None),
+    ],
+)
+def test_availability_never_guesses_or_clamps_invalid_values(raw, scale, expected):
+    from custom_components.aosmith_ble.protocol import decode_availability
+
+    assert decode_availability(raw, scale) == expected
+
+
+def test_confirmed_grouped_energy_response():
+    from custom_components.aosmith_ble.protocol import read_words
+
+    assert read_frame(27, 7, 3).hex().upper() == "BDA0071B0703D8"
+    assert read_words(bytes.fromhex("DB020D1B0700000005594480F0"), 27, 7, 3) == (0, 5, 22852)
