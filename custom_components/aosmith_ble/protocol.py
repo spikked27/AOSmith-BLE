@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import math
 
+from .const import DEFAULT_MAX_TEMP_F, MAX_TEMP_F, MIN_TEMP_F
 from .crc_table import CRC_TABLE
 
 
@@ -93,6 +94,15 @@ def validate_identifier(identifier: str) -> str:
 
 def decode_temperature(raw: int) -> float:
     return round(raw / 256 * 1.8 + 32, 1)
+
+
+def temperature_limit(raw: int | None, current: float) -> float:
+    """Honor a reported maximum; missing data never grants a temperature increase."""
+    if raw is not None:
+        maximum = decode_temperature(raw)
+        if MIN_TEMP_F <= maximum <= 180:
+            return min(MAX_TEMP_F, maximum)
+    return min(DEFAULT_MAX_TEMP_F, max(MIN_TEMP_F, current))
 
 
 def decode_availability(raw: int, scale: str) -> int | None:

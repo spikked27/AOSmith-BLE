@@ -1,4 +1,4 @@
-# Unreleased — 0.3.2.dev0
+# Unreleased — 0.3.2.dev1
 
 - Add device-page Mode duration for Vacation, Guest and Electric, with explicit
   Until changed options and mode-specific limits. Display the active countdown.
@@ -11,12 +11,23 @@
 - Confirm in APK bytecode that the discovered clock writer is called only for
   the older heatPump profile. No next-generation clock writer has been established.
 - Follow the reported remote temperature limit up to the model's documented
-  150°F ceiling; retain a 140°F fallback and keep maximum reads independent of
+  150°F ceiling; fail conservatively when the maximum is missing and keep reads independent of
   optional diagnostic settings. Explain physical-control maximum adjustment.
 - Separate clock requirements for basic control/countdowns versus heater-owned
   schedules. Identify next-generation clock-unset fault 42 and document the
   manual's nine-hour Vacation recovery behavior.
 - This is a development change, not a completed release or hardware-validation claim.
+
+- Remove tariff lookup, cached plans, preview entity, HTTP code and options. Clear
+  old cached plans on upgrade; retire duplicate entities without deleting history.
+- Consolidate faults into Error status, preserving the prior binary sensor ID.
+  Include readable descriptions, unknown codes and clock-unset code 42.
+- Permit setup while Vacation reports 50°F; release the connection after failed
+  initial refresh; hide retained countdown readings outside their active mode.
+- Recheck live temperature maximum before writes. Missing/invalid maximum data
+  never authorizes a higher setting; polling failures do not show a healthy fault state.
+- Pass 115 software tests and Ruff checks. Await shower availability evidence and
+  physical duration checks before calling the development work a final release.
 
 # 0.3.1 — availability calibration and recovery fixes
 

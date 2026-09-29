@@ -101,21 +101,21 @@ therefore assumed to equal the cloud lifetime counter. No arbitrary register
 write or opaque schedule-upload action is exposed.
 
 
-## 0.3.0 energy and tariff changes
+## Energy and retired tariff functionality
 
 The electrical-use words at 27:7–9 combine MSW first into a 48-bit Wh counter.
 Observed words 0000 0005 5944 produce 350532 Wh, consistent with the owner’s
 approximately 350 kWh app reading. Normal polling now requests count=3 in one A0
 read (response length 13), avoiding separately sampled rollover words. Scaling
-is supported by one paired observation; progression/reset behavior and the
-new grouped request still require physical validation. Missing/error/all-FFFF
+is supported by one paired observation; progression/reset behavior still requires physical validation.
+The grouped request/reply was subsequently confirmed on hardware. Missing/error/all-FFFF
 responses never become a false zero. The grid-energy groups remain undecoded.
 
-Tariff lookup is separate from transport. The selected plan is only a local
-cache. No schedule, clock, preference or enrollment writes occur on selection.
+The former tariff lookup/cache was removed in development 0.3.2.dev1.
+Use iCOMM for tariff setup; this component exposes no schedule programming.
 Manual inspection includes candidate clock words 26:3–4 from the older-profile
 APK clock writer; their meaning on next-generation heaters remains unverified.
-See TARIFF.md for the full list of pending protocol/hardware checks.
+See RESEARCH.md for the clock and schedule findings.
 
 
 ## 0.3.1 availability and clock evidence
@@ -151,4 +151,21 @@ The app connection generator #13456 checks `heatPump` before calling
 `setEssentialParams` (#13493), which invokes `setClock` (#14611). Bytecode offsets
 0x8E–0xAA establish that profile guard. Consequently, the block-26 clock writer
 is not established for the next-generation heater. Four zero captures do not
-resolve it. See TARIFF.md; do not reuse the older writer as a generic clock action.
+resolve it. See RESEARCH.md; do not reuse the older writer as a generic clock action.
+
+
+## Consolidated fault decoding and final review
+
+Block 2:7 uses the low byte for the current fault (APK module 1422); the full
+word is retained in attributes/diagnostics. Module 1488 selects catalog 1489
+for the next-generation profile. Code 0 means no fault reported; 42 means clock
+not set. `faults.py` supplies short labels for all byte-sized codes in that
+catalog. Its entry 330 cannot fit this parser and is deliberately not aliased to
+74. Unknown byte codes remain explicit problems. A failed poll is unavailable,
+not a no-fault result. One Error status binary sensor replaces duplicate fault
+readings while retaining the existing fault-present unique ID.
+
+Temperature writes re-read 1:43 under the request lock, after checking live mode.
+A rejected/missing maximum permits no increase over the present setting and is
+capped at 140°F; a valid reported maximum permits up to 150°F. Other read errors
+stop the write. Confirmation still requires a subsequent setpoint readback.

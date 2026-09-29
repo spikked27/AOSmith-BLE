@@ -20,7 +20,7 @@ MIN_TEMP_F = 95
 MAX_TEMP_F = 150
 DEFAULT_MAX_TEMP_F = 140
 
-VERSION = "0.3.2.dev0"
+VERSION = "0.3.2.dev1"
 AVAILABILITY_SCALES = {
     "unverified": "Not calibrated",
     "five_levels": "0–5 levels (estimated 20% steps)",

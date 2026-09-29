@@ -13,7 +13,7 @@ No hardware settings were changed during this research.
 | Readings and cumulative energy | No clock step | HA timestamps readings; cumulative energy is a counter |
 | Vacation/Guest/timed Electric command | No date/time payload | App sends mode plus duration; finite expiry/power recovery still need physical testing |
 | HA history and HA-owned automations | No | These use HA's clock/timezone; scheduled writes require HA and BLE to be available |
-| Tariff lookup and cached plan | No | Lookup stores plan data, not an active heater schedule |
+| Tariff lookup/programming | Removed from integration | Use the official iCOMM app |
 | Heater-owned seasonal/weekday/holiday TOU | Correct heater-local date/time is required | Clock source, synchronization, DST and power-loss behavior remain unresolved |
 
 The previous project-wide clock blocker was too broad. It belongs to reliable
@@ -49,7 +49,8 @@ are equivalent. Do not bypass a reported limit just because the product can
 operate at a higher temperature.
 
 Development changes now allow reported maxima through 150°F, retain the existing
-140°F fallback when maximum data is missing/invalid, and always request the
+fallback no higher than the current setting (capped at 140°F) when maximum data
+is missing/invalid, and always request the
 maximum independently of optional diagnostic reads. There is no automatic
 setpoint increase and no write to the maximum register.
 
@@ -136,7 +137,23 @@ That observation still cannot justify a universal five-level percentage scale.
 - Local user-supplied iCOMM 14.1.0 APK: Hermes bytecode/decompiler cross-checks
   referenced above. APK contents and private diagnostic files are not redistributed.
 
-109 automated tests pass locally, including reported temperature bounds at
+115 automated tests pass locally, including reported temperature bounds at
 125/140/150°F and keeping maximum reads enabled when diagnostics are disabled.
 These are software tests; no new maximum-temperature, duration-expiry, clock,
 DST or heater-owned schedule test was performed on hardware during this research.
+
+
+## Finalization review — 0.3.2.dev1
+
+Tariff HTTP lookup, cached preview, configuration steps and entity were removed.
+Old caches are cleared during setup and retired entities are disabled without
+purging history. Heater schedules are unchanged. No clock entity or writer was
+added: fault 42 appears in the consolidated Error status indicator. The low-byte
+fault parser was rechecked directly in module 1422. Catalog descriptions do not
+establish that every fault applies to every model.
+
+The official availability conversion was rechecked in `parse_hot_water_status`:
+LOW → 0%, MEDIUM → 50%, HIGH → 100%; numeric API values → 100 minus value.
+The APK's BLE WATER_AVAILABLE parser returns the low byte without that conversion.
+Therefore raw 5 cannot yet be labeled High/100% from official-integration code.
+A paired shower-time raw reading and app indication remains the next evidence.

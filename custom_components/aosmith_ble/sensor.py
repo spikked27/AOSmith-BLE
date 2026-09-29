@@ -3,7 +3,7 @@
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfEnergy, UnitOfTemperature
 
-from .const import DOMAIN
+from .const import DOMAIN, TIMED_MODE_REGISTERS
 from .entity import HeaterEntity
 from .protocol import decode_availability
 
@@ -14,9 +14,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         [
             HeaterSensor(coordinator, "target_temperature"),
             HeaterSensor(coordinator, "availability"),
-            HeaterSensor(coordinator, "fault"),
             EnergySensor(coordinator),
-            TariffSensor(coordinator, entry),
             *[ExtendedSensor(coordinator, key) for key in EXTENDED_SENSORS],
         ]
     )
@@ -29,7 +27,6 @@ class HeaterSensor(HeaterEntity, SensorEntity):
         self._attr_name = {
             "target_temperature": "Temperature setpoint",
             "availability": "Hot water availability",
-            "fault": "Fault register",
         }[key]
         if key == "availability":
             self._attr_native_unit_of_measurement = PERCENTAGE
@@ -39,7 +36,6 @@ class HeaterSensor(HeaterEntity, SensorEntity):
         self._attr_icon = {
             "target_temperature": "mdi:thermometer",
             "availability": "mdi:water",
-            "fault": "mdi:alert-circle-outline",
         }[key]
         if key == "target_temperature":
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -47,9 +43,6 @@ class HeaterSensor(HeaterEntity, SensorEntity):
             self._attr_device_class = SensorDeviceClass.TEMPERATURE
             self._attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
             self._attr_suggested_display_precision = 0
-        if key == "fault":
-            self._attr_entity_category = EntityCategory.DIAGNOSTIC
-            self._attr_entity_registry_enabled_default = False
 
     @property
     def native_value(self):
@@ -68,7 +61,7 @@ class HeaterSensor(HeaterEntity, SensorEntity):
                 "calibration": "Select the scale in Configure after comparing with iCOMM",
                 "estimated": self.scale == "five_levels",
             }
-        return {"raw_hex": f"{self.coordinator.data.fault:04X}"}
+        return None
 
 
 EXTENDED_SENSORS = {
@@ -98,7 +91,12 @@ class ExtendedSensor(HeaterEntity, SensorEntity):
 
     @property
     def available(self):
-        return super().available and self.key in self.coordinator.data.registers
+        if not super().available or self.key not in self.coordinator.data.registers:
+            return False
+        if self.key.endswith("_days"):
+            active = TIMED_MODE_REGISTERS.get(self.coordinator.data.mode)
+            return active is not None and active[0] == self.key
+        return True
 
     @property
     def native_value(self):
@@ -136,39 +134,3 @@ class EnergySensor(HeaterEntity, SensorEntity):
     def native_value(self):
         value = self.coordinator.data.registers.get("energy_wh")
         return value / 1000 if value is not None else None
-
-
-class TariffSensor(HeaterEntity, SensorEntity):
-    """Persistent plan preview, not a claim of device programming."""
-
-    _attr_name = "Selected tariff"
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_icon = "mdi:calendar-clock"
-
-    def __init__(self, coordinator, entry):
-        super().__init__(coordinator, "tariff")
-        self.plan = entry.options.get("tariff")
-
-    @property
-    def available(self):
-        # The cache remains readable when Bluetooth or the internet is unavailable.
-        return True
-
-    @property
-    def native_value(self):
-        return self.plan["tariff_name"][:255] if self.plan else "Not selected"
-
-    @property
-    def extra_state_attributes(self):
-        if not self.plan:
-            return {"heater_programming": "not implemented"}
-        return {
-            "utility": self.plan["utility_name"],
-            "tariff_id": self.plan["tariff_id"],
-            "tariff": self.plan["tariff_name"],
-            "retrieved_at": self.plan["retrieved_at"],
-            "source": self.plan["source"],
-            "schedule": self.plan["touEvents"],
-            "holidays": self.plan["holidays"],
-            "heater_programming": "not implemented; selection is a local preview",
-        }

@@ -361,3 +361,33 @@ async def test_temperature_write_rechecks_live_vacation_mode(client, peripheral)
     with pytest.raises(ProtocolError, match="Leave Vacation"):
         await client.set_value(SETPOINT, 0x30E4)
     assert not any(p[1] == 0x40 for p in peripheral.writes if p[0] == 0xBD)
+
+
+@pytest.mark.parametrize("maximum", [125, 140, 150])
+async def test_temperature_write_checks_live_maximum(client, peripheral, maximum):
+    from custom_components.aosmith_ble.const import MAX_SETPOINT, SETPOINT
+    from custom_components.aosmith_ble.protocol import encode_temperature
+
+    peripheral.registers[MAX_SETPOINT] = encode_temperature(maximum)
+    # A stale UI can ask above a newly lowered device limit; no mutation is sent.
+    with pytest.raises(ProtocolError, match="live permitted range"):
+        await client.set_value(SETPOINT, encode_temperature(maximum + 1))
+    assert client.commands[-1]["outcome"] == "not_sent"
+    assert not any(packet[1] == 0x40 for packet in peripheral.writes)
+    state = await client.set_value(SETPOINT, encode_temperature(maximum))
+    assert state.target_temperature == maximum
+    assert client.commands[-1]["outcome"] == "confirmed"
+
+
+@pytest.mark.parametrize("maximum", [None, 0, 0xFFFF])
+async def test_missing_maximum_allows_lowering_but_not_increasing_temperature(client, peripheral, maximum):
+    from custom_components.aosmith_ble.const import MAX_SETPOINT, SETPOINT
+    from custom_components.aosmith_ble.protocol import encode_temperature
+
+    if maximum is not None:
+        peripheral.registers[MAX_SETPOINT] = maximum
+    with pytest.raises(ProtocolError, match="live permitted range"):
+        await client.set_value(SETPOINT, encode_temperature(126))
+    assert not any(packet[1] == 0x40 for packet in peripheral.writes)
+    state = await client.set_value(SETPOINT, encode_temperature(124))
+    assert state.target_temperature == 124

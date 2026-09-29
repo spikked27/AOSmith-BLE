@@ -4,9 +4,9 @@ from homeassistant.components.water_heater import WaterHeaterEntity, WaterHeater
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DEFAULT_MAX_TEMP_F, DOMAIN, MAX_TEMP_F, MIN_TEMP_F, MODE, MODE_NAMES, MODES, SETPOINT
+from .const import DOMAIN, MAX_TEMP_F, MIN_TEMP_F, MODE, MODE_NAMES, MODES, SETPOINT
 from .entity import HeaterEntity
-from .protocol import encode_temperature, encode_timed_mode
+from .protocol import encode_temperature, encode_timed_mode, temperature_limit
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -70,14 +70,9 @@ class Heater(HeaterEntity, WaterHeaterEntity):
 
     @property
     def max_temp(self):
-        from .protocol import decode_temperature
-
-        raw = self.coordinator.data.registers.get("maximum_setpoint")
-        if raw is not None:
-            maximum = decode_temperature(raw)
-            if MIN_TEMP_F <= maximum <= 180:
-                return min(MAX_TEMP_F, maximum)
-        return DEFAULT_MAX_TEMP_F
+        return temperature_limit(
+            self.coordinator.data.registers.get("maximum_setpoint"), self.target_temperature
+        )
 
     @property
     def extra_state_attributes(self):

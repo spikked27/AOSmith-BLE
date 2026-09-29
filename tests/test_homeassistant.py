@@ -51,7 +51,6 @@ def test_sensors_preserve_raw_units(coordinator):
     assert availability.native_value is None
     assert availability.native_unit_of_measurement == "%"
     assert availability.extra_state_attributes["raw_value"] == 5
-    assert HeaterSensor(coordinator, "fault").native_value == 0
     setpoint = HeaterSensor(coordinator, "target_temperature")
     assert setpoint.native_value == 125
     assert setpoint.native_unit_of_measurement == "°F"
@@ -140,7 +139,8 @@ def test_pin_suggestions_do_not_use_shared_defaults():
     assert suggested_pin("ICOMM-unknown") == ""
 
 
-async def test_existing_pairing_setup_never_enrolls(tmp_path):
+@pytest.mark.parametrize("temperature,mode", [(125, 4), (50, 2)])
+async def test_existing_pairing_setup_never_enrolls(tmp_path, temperature, mode):
     hass = HomeAssistant(str(tmp_path))
     flow = ConfigFlow()
     flow.hass = hass
@@ -154,7 +154,7 @@ async def test_existing_pairing_setup_never_enrolls(tmp_path):
     )
     assert result["step_id"] == "confirm"
     client = SimpleNamespace(
-        read_state=AsyncMock(return_value=HeaterState(125, 4, 5, 0)),
+        read_state=AsyncMock(return_value=HeaterState(temperature, mode, 5, 0)),
         enroll=AsyncMock(),
         disconnect=AsyncMock(),
         enrollment_attempted=False,
@@ -238,9 +238,9 @@ async def test_temperature_limit_follows_device_up_to_documented_150(coordinator
 
 def test_unknown_maximum_does_not_raise_fallback_to_150(coordinator):
     heater = Heater(coordinator, SimpleNamespace(options={}))
-    assert heater.max_temp == 140
+    assert heater.max_temp == 125
     coordinator.data = HeaterState(125, 4, 5, 0, registers={"maximum_setpoint": 0xFFFF})
-    assert heater.max_temp == 140
+    assert heater.max_temp == 125
 
 
 async def test_maximum_is_read_even_when_diagnostics_are_disabled(tmp_path):
@@ -357,7 +357,9 @@ async def test_upgrade_retires_only_owned_demand_response_entities(tmp_path):
     from custom_components.aosmith_ble import async_setup_entry
 
     hass = HomeAssistant(str(tmp_path))
-    entry = SimpleNamespace(entry_id="test", async_on_unload=MagicMock(), add_update_listener=MagicMock())
+    entry = SimpleNamespace(
+        entry_id="test", options={}, async_on_unload=MagicMock(), add_update_listener=MagicMock()
+    )
     registry = MagicMock()
     entities = [
         SimpleNamespace(
@@ -485,3 +487,135 @@ async def test_duration_control_rejects_invalid_or_stale_values(coordinator):
     assert control.current_option is None
     coordinator.last_update_success = False
     assert not control.available
+
+
+@pytest.mark.parametrize(
+    "raw,code,description,problem",
+    [
+        (0, 0, "No fault reported", False),
+        (42, 42, "Clock not set", True),
+        (31, 31, "Water leak detected", True),
+        (80, 80, "Air filter needs cleaning", True),
+        (0xAB2A, 42, "Clock not set", True),
+        (255, 255, "Unknown heater fault (255)", True),
+    ],
+)
+def test_single_error_indicator_decodes_clock_and_unknown_faults(
+    coordinator, raw, code, description, problem
+):
+    from custom_components.aosmith_ble.binary_sensor import StatusSensor
+
+    coordinator.data = HeaterState(125, 4, 5, raw)
+    entity = StatusSensor(coordinator, "fault_present")
+    assert entity.name == "Error status"
+    assert entity.unique_id.endswith("_fault_present")
+    assert entity.is_on is problem
+    assert entity.extra_state_attributes["fault_code"] == code
+    assert entity.extra_state_attributes["description"] == description
+    assert entity.extra_state_attributes["clock_not_set"] is (code == 42)
+    assert entity.extra_state_attributes["raw_fault_register"] == raw
+    coordinator.last_update_success = False
+    assert not entity.available
+    assert entity.extra_state_attributes == {"description": "Heater status unavailable"}
+
+
+async def test_tariff_removed_from_options_and_entity_setup(tmp_path, coordinator):
+    from unittest.mock import PropertyMock
+
+    from custom_components.aosmith_ble.config_flow import OptionsFlow
+    from custom_components.aosmith_ble.sensor import async_setup_entry
+
+    hass = HomeAssistant(str(tmp_path))
+    entry = SimpleNamespace(
+        entry_id="test",
+        options={"tariff": {"old": "plan"}, "enable_utility_controls": True, "enable_setpoint_writes": False},
+    )
+    hass.data[DOMAIN] = {"test": coordinator}
+    entities = []
+    await async_setup_entry(hass, entry, entities.extend)
+    assert not any(entity.unique_id.endswith(("_tariff", "_fault")) for entity in entities)
+    flow = OptionsFlow()
+    flow.hass = hass
+    with patch.object(OptionsFlow, "config_entry", new_callable=PropertyMock, return_value=entry):
+        form = await flow.async_step_init()
+        assert form["type"] == "form" and form["step_id"] == "settings"
+        result = await flow.async_step_settings({"poll_interval": 60})
+        assert result["data"] == {"enable_setpoint_writes": False, "poll_interval": 60}
+    await hass.async_stop()
+
+
+async def test_upgrade_removes_tariff_cache_and_retires_duplicate_entities(tmp_path):
+    from unittest.mock import MagicMock, call
+
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.aosmith_ble import async_setup_entry
+
+    hass = HomeAssistant(str(tmp_path))
+    entry = SimpleNamespace(
+        entry_id="test",
+        options={"tariff": {"private": "plan"}, "enable_utility_controls": True, "poll_interval": 45},
+        async_on_unload=MagicMock(),
+        add_update_listener=MagicMock(),
+    )
+    registry = MagicMock()
+    entities = [
+        SimpleNamespace(
+            platform=DOMAIN, unique_id="address_" + key, entity_id="sensor." + key, disabled_by=None
+        )
+        for key in ("tariff", "fault", "fault_present", "availability")
+    ]
+    config_entries = SimpleNamespace(async_forward_entry_setups=AsyncMock(), async_update_entry=MagicMock())
+    coordinator = SimpleNamespace(
+        async_config_entry_first_refresh=AsyncMock(), client=SimpleNamespace(disconnect=AsyncMock())
+    )
+    with (
+        patch.object(er, "async_get", return_value=registry),
+        patch.object(er, "async_entries_for_config_entry", return_value=entities),
+        patch("custom_components.aosmith_ble.HeaterCoordinator", return_value=coordinator),
+        patch.object(hass, "config_entries", config_entries),
+    ):
+        await async_setup_entry(hass, entry)
+    config_entries.async_update_entry.assert_called_once_with(entry, options={"poll_interval": 45})
+    assert registry.async_update_entity.call_args_list == [
+        call("sensor.tariff", disabled_by=er.RegistryEntryDisabler.INTEGRATION),
+        call("sensor.fault", disabled_by=er.RegistryEntryDisabler.INTEGRATION),
+    ]
+    await hass.async_stop()
+
+
+async def test_failed_first_refresh_closes_client_and_leaves_no_loaded_entry(tmp_path):
+    from unittest.mock import MagicMock
+
+    from homeassistant.exceptions import ConfigEntryNotReady
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.aosmith_ble import async_setup_entry
+
+    hass = HomeAssistant(str(tmp_path))
+    entry = SimpleNamespace(entry_id="test", options={})
+    coordinator = SimpleNamespace(
+        async_config_entry_first_refresh=AsyncMock(side_effect=ConfigEntryNotReady),
+        client=SimpleNamespace(disconnect=AsyncMock()),
+    )
+    with (
+        patch.object(er, "async_get", return_value=MagicMock()),
+        patch.object(er, "async_entries_for_config_entry", return_value=[]),
+        patch("custom_components.aosmith_ble.HeaterCoordinator", return_value=coordinator),
+        pytest.raises(ConfigEntryNotReady),
+    ):
+        await async_setup_entry(hass, entry)
+    coordinator.client.disconnect.assert_awaited_once()
+    assert "test" not in hass.data.get(DOMAIN, {})
+    await hass.async_stop()
+
+
+def test_inactive_countdown_is_not_presented_as_current(coordinator):
+    from custom_components.aosmith_ble.sensor import ExtendedSensor
+
+    coordinator.data = HeaterState(125, 4, 5, 0, registers={"vacation_days": 100, "guest_days": 2})
+    assert not ExtendedSensor(coordinator, "vacation_days").available
+    assert not ExtendedSensor(coordinator, "guest_days").available
+    coordinator.data = HeaterState(50, 2, 5, 0, registers={"vacation_days": 100, "guest_days": 2})
+    assert ExtendedSensor(coordinator, "vacation_days").available
+    assert not ExtendedSensor(coordinator, "guest_days").available

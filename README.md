@@ -1,8 +1,8 @@
-# AO Smith Local BLE — development 0.3.2.dev0
+# AO Smith Local BLE — development 0.3.2.dev1
 
 Local Bluetooth integration for Home Assistant. No AO Smith account, password,
-or Internet is needed for heater control. Optional tariff lookup contacts AO Smith’s
-service only when requested in Configure; the selected plan is cached locally.
+or Internet is needed for heater control. Utility tariffs must be configured in
+the official iCOMM app; this integration makes no tariff-service requests.
 
 **Development preview.** Install through HACS as a custom repository or copy
 its custom component manually. This repository is not in HACS's default catalog.
@@ -40,18 +40,17 @@ pump models use different registers and are not supported by this release.
   APK-derived and awaiting hardware validation.
 - Temperature controls default on for new setups, with register readback. The
   slider follows the heater-reported remote maximum, up to the HPS10 manual
-  ceiling of 150°F. Missing/invalid maximum data retains the 140°F fallback.
+  ceiling of 150°F. A missing/invalid maximum does not authorize an increase above
+  the current setting; the fallback is capped at 140°F. Every temperature write
+  rechecks the live maximum, including changes made at the physical controls.
   An existing explicit off preference is preserved.
 - Cumulative **Energy usage** in kWh, suitable for HA energy statistics. The observed
   350.532 kWh agrees with the owner’s approximately 350 kWh app reading.
-- Percentage availability with explicitly selected scale and fault-present status.
+- Percentage availability with explicitly selected scale and one **Error status** problem indicator.
   Until calibrated the percentage is unknown; the raw byte remains in attributes.
-  Duplicate setpoint/raw fault and
-  extended register sensors are diagnostic and disabled by default for new entries.
-  Existing entity IDs, history and user enable/disable choices are preserved.
+  Duplicate setpoint and extended register sensors are diagnostic and disabled
+  by default. The former raw-fault sensor is retired; its history is retained.
 - Optional remaining-days/setpoint diagnostics and model-specific Hot Water Plus.
-- Anonymous ZIP → utility → tariff lookup, with a locally saved seasonal/holiday
-  preview. It does **not** program a heater schedule or calculate tariff costs yet.
 - Demand-response entities are retired; old ones are disabled without deleting history.
   Removing controls does not reset any previously changed heater flags.
 - Refresh, Reconnect and **Inspect extended registers** diagnostic buttons.
@@ -59,7 +58,7 @@ pump models use different registers and are not supported by this release.
   the last 60 protocol events, and 20 command outcomes kept separately from polls.
 - Existing device pairings are never deleted. Routine reconnects never enroll keys.
 
-Actual tank temperature, compressor state, fault descriptions, clock synchronization,
+Actual tank temperature, compressor state, clock synchronization,
 and utility-rate programming are not yet implemented. The setpoint is not presented
 as measured tank temperature. Availability value 5 was observed. A five-level percentage estimate is now an
 explicit option; it is not assumed for every heater. See calibration below. See
@@ -74,25 +73,31 @@ See [VALIDATION.md](VALIDATION.md) for software tests versus physical acceptance
 
 ## Configuration
 
-**Settings → Devices & services → AO Smith Local BLE → Configure** now offers:
+**Settings → Devices & services → AO Smith Local BLE → Configure** opens the
+controls/readings form directly: availability scale, polling interval, temperature
+controls, energy reads, extended diagnostic reads and model-specific Hot Water Plus.
 
-- **Controls and readings**: availability scale, polling interval, temperature writes, energy reads,
-  extended diagnostic reads and model-specific Hot Water Plus.
-- **Look up or replace a utility tariff**: enter a US ZIP, choose a utility and
-  complete tariff, then confirm the local preview. ZIP is sent to the lookup
-  service but not saved. For PSEG Long Island, choose **195 — Residential**
-  (tariff ID 3439409), not the separate Power Supply Charge tariff.
-- **Remove saved tariff**: removes only the local preview, with no heater writes.
+Tariff lookup, preview and cached plans have been removed. Upgrades clear the old
+cache and disable the old Selected tariff entity without deleting its history.
+Set your utility plan through the official iCOMM app. Disconnect HA's BLE session
+while using the phone app if necessary, then reconnect HA. Existing on-heater
+settings are not cleared or rewritten. See [RESEARCH.md](RESEARCH.md) for clock
+and schedule limitations; this integration does not guarantee offline TOU timing.
 
-The **Selected tariff** diagnostic entity shows the cached events, holidays and
-retrieval timestamp even without Internet/Bluetooth. Failed or cancelled lookups
-preserve the previous plan. There is no automatic online refresh, login or account
-configuration. Use the lookup flow again to explicitly replace an outdated plan.
+### Error status
 
-Read [RESEARCH.md](RESEARCH.md) for the temperature-limit, clock and official-integration
-comparison, and [TARIFF.md](TARIFF.md) for schedule validation.
-This version cannot yet make the heater follow the selected plan. Current mode
-and temperature controls continue to work locally.
+One **Error status** binary sensor reports a problem when the heater's current
+fault code is nonzero. Its attributes contain `fault_code`, a readable
+`description`, `clock_not_set`, and the raw word. This reuses the former Fault
+present entity's unique ID, so existing problem automations keep working.
+Code 42 is **Clock not set**; there is no separate clock entity. Unknown codes
+remain problems with their number shown. On connection/poll failure, the entity
+becomes unavailable rather than claiming the heater has no errors.
+
+This is the single current fault reported by the heater, not a complete alarm
+history. A clear fault does not prove clock accuracy or a correct timezone.
+Connection failures and command outcomes remain in HA availability, logs and
+downloadable diagnostics. No fault-reset or unverified clock write is exposed.
 
 Energy and extended reads are optional: rejected registers do not invalidate
 core readings, and transport errors back off for ten minutes. **Inspect extended
@@ -134,9 +139,11 @@ data:
   days: 7
 ```
 
-The duration sensors retain the raw low-byte value: 100 may be the app's **On**
-sentinel, so they are not advertised as elapsed-time measurements. Utility and
-remaining-days controls/readings still need confirmation on real devices.
+The diagnostic duration sensors retain the raw low byte and are available only
+for the active mode. Vacation 100 is the app’s **On** sentinel, not 100 remaining
+days. Finite-duration controls/readings still need confirmation on real devices.
+The HPS10 manual limits Electric duration to 1–7 days, while the generic app UI
+offers 1–99; longer Electric durations are not verified for HPS10.
 
 ## Installation
 
@@ -181,7 +188,7 @@ The normal entity is **Hot water availability** in percent. The raw Bluetooth
 value is retained in its `raw_value` attribute and diagnostics. Its unique ID
 is unchanged; pre-upgrade raw history is not rewritten into percentages.
 
-Use **Configure → Controls and readings → Hot-water availability scale**:
+Use **Configure → Hot-water availability scale**:
 
 | Selection | Mapping | Raw 5 displays |
 |---|---|---|
@@ -284,8 +291,6 @@ do not contact a heater. See `PROTOCOL.md` for the implementation assumptions.
    reports without collecting credentials.
 3. Add explicit protocol profiles for additional models, backed by captures/tests.
 4. Check the energy counter over a heating cycle and through a heater restart.
-5. Investigate local utility-rate/TOU scheduling (APK contains season/holiday
-   block writers). Validate formats and readback before exposing any schedule write.
-   This is distinct from tariff-based cost calculations in Home Assistant.
+Utility tariffs and on-heater TOU programming remain the official app’s responsibility.
 
 This is an independent integration, not affiliated with AO Smith.

@@ -63,14 +63,6 @@
   },
   "options": {
     "step": {
-      "init": {
-        "title": "AO Smith Local BLE",
-        "menu_options": {
-          "settings": "Controls and readings",
-          "tariff": "Look up or replace a utility tariff",
-          "remove_tariff": "Remove saved tariff"
-        }
-      },
       "settings": {
         "title": "Controls and readings",
         "description": "Core controls remain local. Energy is read over Bluetooth. Enable Hot Water Plus only if your heater offers it in iCOMM. Calibrate availability by comparing its raw_value attribute with iCOMM before selecting a scale. Five levels is an estimate, not a verified capacity measurement. Until calibrated, the percentage is unknown.",
@@ -82,39 +74,7 @@
           "energy_readings": "Read cumulative energy usage",
           "availability_scale": "Hot-water availability scale"
         }
-      },
-      "tariff": {
-        "title": "Find your utility",
-        "description": "Optional online lookup through AO Smith’s tariff service. Your ZIP code is sent only when you continue; no AO Smith account is used. The selected plan is saved locally. ZIP code is not saved. Lookup does not change your heater’s schedule.",
-        "data": {
-          "zipcode": "US ZIP code"
-        }
-      },
-      "utility": {
-        "title": "Choose your utility",
-        "data": {
-          "utility_id": "Utility"
-        }
-      },
-      "rate": {
-        "title": "Choose your tariff",
-        "description": "Choose the complete residential tariff shown on your bill. A power-supply-only tariff may be listed separately.",
-        "data": {
-          "tariff_id": "Tariff"
-        }
-      },
-      "tariff_confirm": {
-        "title": "Save tariff preview",
-        "description": "{utility}: {tariff}. Includes {events} seasonal schedule events and {holidays} holidays. Save this plan locally? This version does not program the heater, synchronize its clock, or calculate costs. Existing heater schedules remain unchanged. Internet access is needed only to look up or replace the plan."
-      },
-      "remove_tariff": {
-        "title": "Remove saved tariff?",
-        "description": "Removes the local tariff preview. The heater’s settings and any schedule already stored in it are unchanged."
       }
-    },
-    "error": {
-      "invalid_zipcode": "Enter a five-digit US ZIP code.",
-      "tariff_lookup_failed": "Could not retrieve a supported plan. Check Internet access or try again later. Your previous saved plan is unchanged."
     }
   },
   "services": {
