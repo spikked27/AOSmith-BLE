@@ -1,3 +1,16 @@
+# 0.3.0 — tariff preview and entity cleanup
+
+- Optional anonymous ZIP/utility/tariff lookup with confirmation, validated cache,
+  retained seasons/holidays, explicit replacement/removal, and no background requests.
+- Local cumulative energy sensor (kWh); reads all three words in one response.
+  Unsupported/malformed reads produce unavailable, never a fabricated zero.
+- Retire demand-response controls/status entities; stop routine utility polling.
+  Retain old entity history and preserve existing core entity IDs/options.
+- Disable duplicate/raw diagnostic sensors by default for new registrations.
+- Add timestamped candidate-clock reads to manual inspection and host timezone
+  metadata to diagnostics. Clock and schedule writes are not enabled.
+- Add tariff flow/error/cache and grouped-energy tests.
+
 # Changelog
 
 ## 0.2.0 — 2026-09-29 (development preview)

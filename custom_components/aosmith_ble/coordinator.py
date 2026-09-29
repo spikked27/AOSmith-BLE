@@ -17,6 +17,7 @@ from .const import (
     CONF_INTERVAL,
     CONF_PIN,
     DEFAULT_INTERVAL,
+    ENERGY,
     HOT_WATER_PLUS,
     INSPECT_REGISTERS,
     NAME,
@@ -56,11 +57,10 @@ class HeaterCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, entry):
         self.client = make_client(hass, entry.data)
         self.options = dict(entry.options)
+        if entry.options.get("energy_readings", True):
+            self.client.optional_registers["energy_wh"] = ENERGY
         if entry.options.get("extended_readings", True):
-            self.client.optional_registers = dict(OPTIONAL_REGISTERS)
-        if entry.options.get("enable_utility_controls", False):
-            for key in ("utility_override", "advanced_load", "utility_enrollment"):
-                self.client.optional_registers[key] = OPTIONAL_REGISTERS[key]
+            self.client.optional_registers.update(OPTIONAL_REGISTERS)
         if entry.options.get("enable_hot_water_plus", False):
             self.client.optional_registers["hot_water_plus"] = HOT_WATER_PLUS
         self.address = entry.data[CONF_ADDRESS]

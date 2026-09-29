@@ -1,15 +1,18 @@
-# Validation of development preview 0.2.0
+# Validation of development preview 0.3.0
 
 September 29, 2026. Python 3.13.15 and Home Assistant 2025.12.5 with its
 Bluetooth/USB dependencies. Ruff lint and formatting checks pass.
 
-49 automated tests cover captured read packets, exact APK CRC, temperature and
+63 automated tests cover captured read packets, exact APK CRC, temperature and
 timed-mode encoding, synthetic HMAC, framing, authentication/recovery, serialized
 requests, write/readback and uncertain writes without replay. New coverage checks
 optional-register rejection, timeout/backoff without losing core readings, manual
 read-only inspection retry, boost's live mode prerequisite, per-heater timed action
 targeting, optional-entity availability, exact A5 switch encoding, feature options,
-and service UI selectors on the minimum supported HA test runtime.
+and service UI selectors on the minimum supported HA test runtime. Version 0.3.0
+adds grouped energy reads, invalid/unsupported energy without fabricated zeros,
+tariff HTTP/GraphQL error handling, season/holiday preservation, settings/cache
+isolation, offline preview, and scoped retirement of legacy utility entities.
 
 One upstream aiohttp/Home Assistant deprecation warning remains during import.
 The tests do not connect to physical BLE hardware.
@@ -28,7 +31,10 @@ Model HPS10-80H45DV, reported firmware 6.4:
 
 Version 0.2.0 timed modes, remaining days, utility registers, and Hot Water Plus
 (on supported models) are APK-derived and have not yet been hardware tested.
-Energy scaling and tariff/schedule programming remain research items.
+The local 350.532 kWh interpretation matches the owner’s approximately 350 kWh
+app value. Grouped reads, heating-cycle deltas and reset behavior still need
+hardware testing. Tariff lookup/cache is implemented; clock synchronization and
+on-heater schedule programming remain unimplemented pending validation.
 Discovery retest, additional adapters/proxies/models, multi-slot pairing, long
 radio idle or heater power interruption, and internet-blocked endurance remain
 open. Passing these tests is not a claim of universal iCOMM compatibility.

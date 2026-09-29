@@ -19,7 +19,8 @@ FAULT = (2, 7)
 MIN_TEMP_F = 95
 MAX_TEMP_F = 140
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
+ENERGY = (27, 7)
 MAX_SETPOINT = (1, 43)
 REMOTE_SETPOINT = (11, 6)
 VACATION_DAYS = (11, 17)
@@ -36,14 +37,16 @@ OPTIONAL_REGISTERS = {
     "vacation_days": VACATION_DAYS,
     "guest_days": GUEST_DAYS,
     "electric_days": ELECTRIC_DAYS,
+}
+# Read-only capture; grid energy units and clock mapping remain unverified.
+INSPECT_REGISTERS = {
+    "clock_candidate_low": (26, 3),
+    "clock_candidate_high": (26, 4),
+    **OPTIONAL_REGISTERS,
     "utility_override": UTILITY_OVERRIDE,
     "cta_present": CTA_PRESENT,
     "advanced_load": ADVANCED_LOAD,
     "utility_enrollment": UTILITY_ENROLLMENT,
-}
-# Read-only research capture. No units or cumulative-energy semantics assumed.
-INSPECT_REGISTERS = {
-    **OPTIONAL_REGISTERS,
     "hot_water_plus": HOT_WATER_PLUS,
     **{f"electric_power_usage_{2 - i}": (27, 7 + i) for i in range(3)},
     **{f"grid_present_energy_{2 - i}": (27, 10 + i) for i in range(3)},

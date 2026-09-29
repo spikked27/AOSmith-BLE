@@ -1,7 +1,8 @@
-# AO Smith Local BLE — experimental 0.2.0
+# AO Smith Local BLE — experimental 0.3.0
 
 Local Bluetooth integration for Home Assistant. No AO Smith account, password,
-cloud API, or internet request is used by the integration at runtime.
+or Internet is needed for heater control. Optional tariff lookup contacts AO Smith’s
+service only when requested in Configure; the selected plan is cached locally.
 
 **Development preview.** Install through HACS as a custom repository or copy
 its custom component manually. This repository is not in HACS's default catalog.
@@ -40,41 +41,55 @@ pump models use different registers and are not supported by this release.
 - Temperature controls default on for new setups (95–140°F), with register
   readback. An existing explicit off preference is preserved. A readable device
   maximum can reduce the UI limit; it never raises the 140°F ceiling.
-- Separate temperature-setpoint, raw availability, fault-register and fault-present sensors.
-- Optional device maximum/remote-setpoint registers, remaining-days readings,
-  utility-module presence, demand-response pause, advanced-load-up and enrollment flags.
-- Opt-in utility switches and Hot Water Plus levels Off/1/2/3 on supported models.
+- Cumulative **Energy usage** in kWh, suitable for HA energy statistics. The observed
+  350.532 kWh agrees with the owner’s approximately 350 kWh app reading.
+- Raw availability and fault-present status. Duplicate setpoint/raw fault and
+  extended register sensors are diagnostic and disabled by default for new entries.
+  Existing entity IDs, history and user enable/disable choices are preserved.
+- Optional remaining-days/setpoint diagnostics and model-specific Hot Water Plus.
+- Anonymous ZIP → utility → tariff lookup, with a locally saved seasonal/holiday
+  preview. It does **not** program a heater schedule or calculate tariff costs yet.
+- Demand-response entities are retired; old ones are disabled without deleting history.
+  Removing controls does not reset any previously changed heater flags.
 - Refresh, Reconnect and **Inspect extended registers** diagnostic buttons.
 - Redacted downloadable diagnostics, a timestamped extended-register capture,
   and the last 60 protocol events.
 - Existing device pairings are never deleted. Routine reconnects never enroll keys.
 
-Actual tank temperature, compressor state, fault descriptions, energy kWh, and
-utility-rate programming are not yet implemented. The setpoint is not presented
+Actual tank temperature, compressor state, fault descriptions, clock synchronization,
+and utility-rate programming are not yet implemented. The setpoint is not presented
 as measured tank temperature. Availability value 5 was observed; the proposed
 0–5 → 0–100% conversion remains unverified and is not applied. See
 [FEATURES.md](FEATURES.md) for the full app-feature inventory and evidence gaps.
 
-## New controls in 0.2.0
+## Update to 0.3.0
 
-Update the HACS download and restart Home Assistant. Keep your existing entry
-and pairing. If HACS does not offer an update yet, use its Redownload action for
-this custom repository's main branch. Confirm version **0.2.0** in diagnostics.
+Redownload the main branch in HACS and restart Home Assistant. Keep your existing
+entry and pairing. Confirm version **0.3.0** in diagnostics.
 
-**Settings → Devices & services → AO Smith Local BLE → Configure** offers:
+**Settings → Devices & services → AO Smith Local BLE → Configure** now offers:
 
-- **Read remaining days and utility status** (default on): queries named registers
-  only. Rejected registers do not break temperature/mode polling; transport failures
-  stop the optional batch and back off that register for ten minutes. Inspect
-  retries immediately. Turn this off if a model has trouble with extended polling.
-- **Enable experimental utility controls** (default off): Pause utility demand
-  response, Advanced load-up, and Utility enrollment device flag. These only write
-  the heater's flags; they do not register an account, enroll a utility contract,
-  or set a tariff. Record original values before testing and restore afterward.
-- **Enable Hot Water Plus** (default off): enable only if your heater offers it in
-  iCOMM. The APK restricts this to the next-generation BEST family. An unsupported
-  register reading as zero is not proof of feature support. Boost requires Electric,
-  Hybrid or Heat Pump mode; the integration rechecks the live mode before writing.
+- **Controls and readings**: polling interval, temperature writes, energy reads,
+  extended diagnostic reads and model-specific Hot Water Plus.
+- **Look up or replace a utility tariff**: enter a US ZIP, choose a utility and
+  complete tariff, then confirm the local preview. ZIP is sent to the lookup
+  service but not saved. For PSEG Long Island, choose **195 — Residential**
+  (tariff ID 3439409), not the separate Power Supply Charge tariff.
+- **Remove saved tariff**: removes only the local preview, with no heater writes.
+
+The **Selected tariff** diagnostic entity shows the cached events, holidays and
+retrieval timestamp even without Internet/Bluetooth. Failed or cancelled lookups
+preserve the previous plan. There is no automatic online refresh, login or account
+configuration. Use the lookup flow again to explicitly replace an outdated plan.
+
+Read [TARIFF.md](TARIFF.md) for clock, daylight-saving and schedule validation.
+This version cannot yet make the heater follow the selected plan. Current mode
+and temperature controls continue to work locally.
+
+Energy and extended reads are optional: rejected registers do not invalidate
+core readings, and transport errors back off for ten minutes. **Inspect extended
+registers** retries known registers. Enable Hot Water Plus only on models that
+actually offer it in iCOMM; the live mode is checked before each boost write.
 
 For custom duration, open **Developer tools → Actions → AO Smith Local BLE: Set
  timed mode**, select your integration entry, mode and days. The same action is
@@ -167,8 +182,8 @@ updates simpler. Do not reinstall or recreate pairing for each update.
    app energy reading with its timestamp. If practical, repeat after a heating cycle.
 
 The capture includes raw 16-bit words for the APK's `OADR_ELECTRIC_POWER_USAGE`,
-`OADR_GRID_PRESENT_ENERGY_LEVEL` and `OADR_GRID_TOTAL_ENERGY_LEVEL` groups. They
-are intentionally not presented as watts, kWh or a lifetime meter yet. The capture
+`OADR_GRID_PRESENT_ENERGY_LEVEL` and `OADR_GRID_TOTAL_ENERGY_LEVEL` groups. The electrical-use group is now read together as a 48-bit Wh counter and exposed
+as kWh. The two grid-energy groups still have unknown units and remain raw. The capture also includes candidate clock words (unverified for this profile). It
 is read-only, contains a timestamp and per-register results, and clears on reload.
 Capture/normal polling share one request queue. Pairing material is omitted.
 
@@ -201,7 +216,7 @@ do not contact a heater. See `PROTOCOL.md` for the implementation assumptions.
 2. Publish tagged releases after hardware testing; accept model/firmware
    reports without collecting credentials.
 3. Add explicit protocol profiles for additional models, backed by captures/tests.
-4. Decode local power/energy registers and compare against the cloud kWh baseline.
+4. Check the energy counter over a heating cycle and through a heater restart.
 5. Investigate local utility-rate/TOU scheduling (APK contains season/holiday
    block writers). Validate formats and readback before exposing any schedule write.
    This is distinct from tariff-based cost calculations in Home Assistant.

@@ -99,3 +99,20 @@ The app also fetches tariff metadata from GraphQL and energy history from
 `getEnergyUseData` (average, dated kWh, lifetimeKwh). A local energy word is not
 therefore assumed to equal the cloud lifetime counter. No arbitrary register
 write or opaque schedule-upload action is exposed.
+
+
+## 0.3.0 energy and tariff changes
+
+The electrical-use words at 27:7–9 combine MSW first into a 48-bit Wh counter.
+Observed words 0000 0005 5944 produce 350532 Wh, consistent with the owner’s
+approximately 350 kWh app reading. Normal polling now requests count=3 in one A0
+read (response length 13), avoiding separately sampled rollover words. Scaling
+is supported by one paired observation; progression/reset behavior and the
+new grouped request still require physical validation. Missing/error/all-FFFF
+responses never become a false zero. The grid-energy groups remain undecoded.
+
+Tariff lookup is separate from transport. The selected plan is only a local
+cache. No schedule, clock, preference or enrollment writes occur on selection.
+Manual inspection includes candidate clock words 26:3–4 from the older-profile
+APK clock writer; their meaning on next-generation heaters remains unverified.
+See TARIFF.md for the full list of pending protocol/hardware checks.

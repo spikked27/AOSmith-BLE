@@ -21,7 +21,7 @@ from .protocol import (
     decode_temperature,
     frame,
     read_frame,
-    read_value,
+    read_words,
     validate_identifier,
     write_frame,
 )
@@ -188,6 +188,9 @@ class HeaterClient:
             await self._close()
 
     async def _read(self, register):
+        return (await self._read_words(register))[0]
+
+    async def _read_words(self, register, count=1):
         block, parameter = register
 
         def matches(packet):
@@ -197,14 +200,14 @@ class HeaterClient:
             return len(packet) == 5 or packet[3:5] == bytes(register)
 
         try:
-            packet = await self._request(read_frame(block, parameter), matches)
+            packet = await self._request(read_frame(block, parameter, count), matches)
         except StatusError as err:
             if err.code not in (0x10, 0x20):
                 raise
             self._authenticated = False
             await self._authenticate()
-            packet = await self._request(read_frame(block, parameter), matches)
-        return read_value(packet, block, parameter)
+            packet = await self._request(read_frame(block, parameter, count), matches)
+        return read_words(packet, block, parameter, count)
 
     async def _snapshot(self):
         temperature = await self._read(SETPOINT)
@@ -233,7 +236,14 @@ class HeaterClient:
                 self.optional_errors[key] = "Backing off after read failure; use Inspect to retry"
                 continue
             try:
-                values[key] = await self._read(register)
+                if key == "energy_wh":
+                    # One response avoids mixing words across a low-word rollover.
+                    words = await self._read_words(register, 3)
+                    if words == (0xFFFF, 0xFFFF, 0xFFFF):
+                        raise ProtocolError("Energy counter is unavailable")
+                    values[key] = (words[0] << 32) | (words[1] << 16) | words[2]
+                else:
+                    values[key] = await self._read(register)
                 self.optional_retry_after.pop(register, None)
                 self.unsupported_registers.discard(register)
             except StatusError as err:

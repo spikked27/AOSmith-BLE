@@ -55,8 +55,10 @@ def check_status(packet: bytes) -> None:
         raise StatusError(packet[-2])
 
 
-def read_frame(block: int, parameter: int) -> bytes:
-    return frame(0xA0, bytes((block, parameter, 1)))
+def read_frame(block: int, parameter: int, count: int = 1) -> bytes:
+    if not 1 <= count <= 6 or parameter + count > 256:
+        raise ValueError("Read one to six contiguous words")
+    return frame(0xA0, bytes((block, parameter, count)))
 
 
 def write_frame(block: int, parameter: int, value: int) -> bytes:
@@ -64,10 +66,14 @@ def write_frame(block: int, parameter: int, value: int) -> bytes:
 
 
 def read_value(packet: bytes, block: int, parameter: int) -> int:
+    return read_words(packet, block, parameter, 1)[0]
+
+
+def read_words(packet: bytes, block: int, parameter: int, count: int) -> tuple[int, ...]:
     check_status(packet)
-    if len(packet) != 9 or packet[1] != 0x02 or packet[3:5] != bytes((block, parameter)):
+    if len(packet) != 7 + count * 2 or packet[1] != 0x02 or packet[3:5] != bytes((block, parameter)):
         raise ProtocolError("Read response does not match requested register")
-    return int.from_bytes(packet[5:7], "big")
+    return tuple(int.from_bytes(packet[i : i + 2], "big") for i in range(5, len(packet) - 2, 2))
 
 
 def auth_frame(challenge_packet: bytes, identifier: str) -> bytes:

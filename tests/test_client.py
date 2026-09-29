@@ -87,7 +87,16 @@ class FakePeripheral:
                     return
                 # An unrelated valid frame must not satisfy the read.
                 self.send(reply(0x02, b"\x01\x01\x00\x00"))
-                self.send(reply(0x02, data[3:5] + self.registers[register].to_bytes(2, "big")))
+                registers = [(register[0], register[1] + offset) for offset in range(data[5])]
+                if any(reg not in self.registers for reg in registers):
+                    self.send(reply(0x02, status=1))
+                    return
+                self.send(
+                    reply(
+                        0x02,
+                        data[3:5] + b"".join(self.registers[reg].to_bytes(2, "big") for reg in registers),
+                    )
+                )
             elif opcode == 0x40:
                 if self.apply_write:
                     self.registers[tuple(data[3:5])] = int.from_bytes(data[5:7], "big")
@@ -236,3 +245,25 @@ async def test_hot_water_plus_checks_fresh_mode_before_write(client, peripheral)
     with pytest.raises(ProtocolError, match="requires Electric"):
         await client.set_value(HOT_WATER_PLUS, 1)
     assert not any(p[1] == 0x40 for p in peripheral.writes if p[0] == 0xBD)
+
+
+async def test_energy_counter_uses_one_contiguous_read(client, peripheral):
+    client.optional_registers = {"energy_wh": (27, 7)}
+    peripheral.registers.update({(27, 7): 0, (27, 8): 5, (27, 9): 22852})
+    assert (await client.read_state()).registers["energy_wh"] == 350532
+    requests = [p for p in peripheral.writes if p[1] == 0xA0 and p[3:5] == bytes((27, 7))]
+    assert len(requests) == 1 and requests[0][5] == 3
+    peripheral.registers.update({(27, 8): 6, (27, 9): 0})
+    assert (await client.read_state()).registers["energy_wh"] == 393216
+
+
+async def test_unavailable_energy_does_not_publish_zero_or_break_controls(client, peripheral):
+    client.optional_registers = {"energy_wh": (27, 7)}
+    state = await client.read_state()
+    assert "energy_wh" not in state.registers
+    assert state.mode == 4 and state.target_temperature == 125
+    peripheral.registers.update({(27, 7): 65535, (27, 8): 65535, (27, 9): 65535})
+    client.unsupported_registers.clear()
+    state = await client.read_state()
+    assert "energy_wh" not in state.registers
+    assert state.target_temperature == 125

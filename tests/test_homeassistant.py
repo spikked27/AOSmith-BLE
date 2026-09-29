@@ -244,37 +244,32 @@ async def test_timed_mode_service_targets_only_selected_heater(tmp_path, coordin
 
 
 async def test_optional_entities_handle_missing_data_and_exact_values(coordinator):
-    from custom_components.aosmith_ble.binary_sensor import StatusSensor
-    from custom_components.aosmith_ble.const import ADVANCED_LOAD, HOT_WATER_PLUS
+    from custom_components.aosmith_ble.const import HOT_WATER_PLUS
     from custom_components.aosmith_ble.select import HotWaterPlus
-    from custom_components.aosmith_ble.sensor import ExtendedSensor
-    from custom_components.aosmith_ble.switch import UtilitySwitch
+    from custom_components.aosmith_ble.sensor import EnergySensor, ExtendedSensor
 
-    switch = UtilitySwitch(coordinator, "advanced_load")
     boost = HotWaterPlus(coordinator)
     sensor = ExtendedSensor(coordinator, "vacation_days")
-    flag = StatusSensor(coordinator, "cta_present")
-    for entity in [switch, boost, sensor, flag]:
+    energy = EnergySensor(coordinator)
+    for entity in [boost, sensor, energy]:
         assert not entity.available
-    assert boost.current_option is None
-    assert flag.is_on is None
-    with pytest.raises(HomeAssistantError):
-        await switch.async_turn_on()
+    assert energy.native_value is None
     coordinator.data = HeaterState(
         125,
         4,
         5,
         0,
-        registers={"advanced_load": 0xA5, "hot_water_plus": 2, "vacation_days": 100, "cta_present": 1},
+        registers={
+            "hot_water_plus": 2,
+            "vacation_days": 100,
+            "energy_wh": 350532,
+        },
     )
-    assert switch.is_on is True
     assert boost.current_option == "Level 2"
-    assert flag.is_on is True
     assert sensor.native_value == 100 and sensor.native_unit_of_measurement is None
-    await switch.async_turn_on()
-    coordinator.async_set_value.assert_awaited_with(ADVANCED_LOAD, 0xA5)
-    await switch.async_turn_off()
-    coordinator.async_set_value.assert_awaited_with(ADVANCED_LOAD, 0)
+    assert energy.native_value == 350.532
+    assert energy.native_unit_of_measurement == "kWh"
+    assert energy.state_class == "total_increasing"
     await boost.async_select_option("Level 3")
     coordinator.async_set_value.assert_awaited_with(HOT_WATER_PLUS, 3)
     coordinator.data = HeaterState(125, 2, 5, 0, registers={"hot_water_plus": 2})
@@ -283,20 +278,19 @@ async def test_optional_entities_handle_missing_data_and_exact_values(coordinato
 
 
 async def test_optional_platforms_respect_model_options(tmp_path, coordinator):
-    from custom_components.aosmith_ble import select, switch
+    from custom_components.aosmith_ble import PLATFORMS, select
+    from custom_components.aosmith_ble.binary_sensor import FLAGS
 
     hass = HomeAssistant(str(tmp_path))
     hass.data[DOMAIN] = {"test": coordinator}
     entities = []
     entry = SimpleNamespace(entry_id="test", options={})
     await select.async_setup_entry(hass, entry, entities.extend)
-    await switch.async_setup_entry(hass, entry, entities.extend)
     assert entities == []
-    entry.options = {"enable_hot_water_plus": True, "enable_utility_controls": True}
+    entry.options = {"enable_hot_water_plus": True}
     await select.async_setup_entry(hass, entry, entities.extend)
-    await switch.async_setup_entry(hass, entry, entities.extend)
-    assert len(entities) == 4
-    assert len({entity.unique_id for entity in entities}) == 4
+    assert len(entities) == 1
+    assert "switch" not in PLATFORMS and set(FLAGS) == {"fault_present"}
     await hass.async_stop()
 
 
@@ -310,3 +304,52 @@ def test_action_ui_selectors_validate_with_minimum_ha_version():
     fields = description["set_timed_mode"]["fields"]
     for field in fields.values():
         selector(field["selector"])
+
+
+async def test_upgrade_retires_only_owned_demand_response_entities(tmp_path):
+    from unittest.mock import MagicMock
+
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.aosmith_ble import async_setup_entry
+
+    hass = HomeAssistant(str(tmp_path))
+    entry = SimpleNamespace(entry_id="test", async_on_unload=MagicMock(), add_update_listener=MagicMock())
+    registry = MagicMock()
+    entities = [
+        SimpleNamespace(
+            platform=DOMAIN,
+            unique_id="address_advanced_load_control",
+            entity_id="switch.retired",
+            disabled_by=None,
+        ),
+        SimpleNamespace(
+            platform=DOMAIN,
+            unique_id="address_cta_present",
+            entity_id="binary_sensor.already_disabled",
+            disabled_by=er.RegistryEntryDisabler.USER,
+        ),
+        SimpleNamespace(
+            platform="another_integration",
+            unique_id="address_advanced_load_control",
+            entity_id="switch.unrelated",
+            disabled_by=None,
+        ),
+        SimpleNamespace(
+            platform=DOMAIN, unique_id="address_water_heater", entity_id="water_heater.keep", disabled_by=None
+        ),
+    ]
+    coordinator = SimpleNamespace(
+        async_config_entry_first_refresh=AsyncMock(), client=SimpleNamespace(disconnect=AsyncMock())
+    )
+    with (
+        patch.object(er, "async_get", return_value=registry),
+        patch.object(er, "async_entries_for_config_entry", return_value=entities),
+        patch("custom_components.aosmith_ble.HeaterCoordinator", return_value=coordinator),
+        patch.object(hass, "config_entries", SimpleNamespace(async_forward_entry_setups=AsyncMock())),
+    ):
+        assert await async_setup_entry(hass, entry)
+    registry.async_update_entity.assert_called_once_with(
+        "switch.retired", disabled_by=er.RegistryEntryDisabler.INTEGRATION
+    )
+    await hass.async_stop()

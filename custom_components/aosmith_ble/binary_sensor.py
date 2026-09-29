@@ -1,4 +1,4 @@
-"""Read-only utility status and fault presence."""
+"""Fault presence; utility flags remain in read-only research diagnostics."""
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.const import EntityCategory
@@ -8,10 +8,6 @@ from .entity import HeaterEntity
 
 FLAGS = {
     "fault_present": "Fault present",
-    "cta_present": "CTA utility module present",
-    "utility_enrollment": "Utility enrollment device flag",
-    "utility_override": "Utility demand response paused",
-    "advanced_load": "Advanced load-up enabled",
 }
 
 
@@ -26,20 +22,8 @@ class StatusSensor(HeaterEntity, BinarySensorEntity):
         super().__init__(coordinator, key)
         self.key = key
         self._attr_name = FLAGS[key]
-        if key == "fault_present":
-            self._attr_device_class = BinarySensorDeviceClass.PROBLEM
-
-    @property
-    def available(self):
-        return super().available and (
-            self.key == "fault_present" or self.key in self.coordinator.data.registers
-        )
+        self._attr_device_class = BinarySensorDeviceClass.PROBLEM
 
     @property
     def is_on(self):
-        if self.key == "fault_present":
-            return bool(self.coordinator.data.fault & 0xFF)
-        value = self.coordinator.data.registers.get(self.key)
-        if value is None:
-            return None
-        return (value & 0xFF) == 0xA5 if self.key == "advanced_load" else bool(value & 0xFF)
+        return bool(self.coordinator.data.fault & 0xFF)
