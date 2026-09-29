@@ -49,6 +49,7 @@ class HeaterState:
     fault: int
     mode_days: int = 0
     registers: dict[str, int] = field(default_factory=dict)
+    availability_word: int | None = None
 
 
 class HeaterClient:
@@ -240,7 +241,7 @@ class HeaterClient:
         requested = dict(self.optional_registers)
         if mode & 0xFF in TIMED_MODE_REGISTERS:
             key, register = TIMED_MODE_REGISTERS[mode & 0xFF]
-            # The duration control still needs its value when diagnostic reads are off.
+            # The active countdown is part of the standard state.
             requested = {key: register, **requested}
         registers = await self._read_optional(requested)
         return HeaterState(
@@ -250,6 +251,7 @@ class HeaterClient:
             fault,
             mode >> 8,
             registers,
+            availability_word=availability,
         )
 
     async def _read_optional(self, registers, *, retry_unsupported=False):

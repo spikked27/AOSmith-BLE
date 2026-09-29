@@ -1,7 +1,6 @@
 """One problem indicator covering the heater's reported fault conditions."""
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
-from homeassistant.const import EntityCategory
 
 from .const import DOMAIN
 from .entity import HeaterEntity
@@ -17,8 +16,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class StatusSensor(HeaterEntity, BinarySensorEntity):
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-
     def __init__(self, coordinator, key):
         super().__init__(coordinator, key)
         self.key = key

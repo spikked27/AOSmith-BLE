@@ -18,6 +18,7 @@ from .const import (
     DEFAULT_INTERVAL,
     DOMAIN,
     SERVICE_UUID,
+    clean_options,
 )
 from .coordinator import make_client
 from .protocol import ProtocolError, StatusError, validate_identifier
@@ -37,6 +38,7 @@ def is_heater(info):
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
+    MINOR_VERSION = 2
 
     def __init__(self):
         self._address = ""
@@ -212,9 +214,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class OptionsFlow(config_entries.OptionsFlow):
     def _save(self, updates):
-        options = {**self.config_entry.options, **updates}
-        options.pop("enable_utility_controls", None)
-        options.pop("tariff", None)
+        options = clean_options({**self.config_entry.options, **updates})
         return self.async_create_entry(title="", data=options)
 
     async def async_step_init(self, user_input=None):
@@ -229,22 +229,11 @@ class OptionsFlow(config_entries.OptionsFlow):
                 {
                     vol.Required(
                         "availability_scale",
-                        default=self.config_entry.options.get("availability_scale", "unverified"),
+                        default=clean_options(self.config_entry.options)["availability_scale"],
                     ): vol.In(AVAILABILITY_SCALES),
                     vol.Required(
                         CONF_INTERVAL, default=self.config_entry.options.get(CONF_INTERVAL, DEFAULT_INTERVAL)
                     ): vol.All(vol.Coerce(int), vol.Range(min=15, max=300)),
-                    vol.Required(
-                        "enable_setpoint_writes",
-                        default=self.config_entry.options.get("enable_setpoint_writes", True),
-                    ): bool,
-                    vol.Required(
-                        "extended_readings", default=self.config_entry.options.get("extended_readings", True)
-                    ): bool,
-                    vol.Required(
-                        "energy_readings",
-                        default=self.config_entry.options.get("energy_readings", True),
-                    ): bool,
                     vol.Required(
                         "enable_hot_water_plus",
                         default=self.config_entry.options.get("enable_hot_water_plus", False),

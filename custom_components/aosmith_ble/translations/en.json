@@ -25,7 +25,7 @@
       },
       "credentials": {
         "title": "Local pairing",
-        "description": "Heater: {name}. This experimental profile supports next-generation iCOMM heat pumps; HPS10-80H45DV is the first tested model. For a new pairing, leave the identifier blank to generate one. To reuse a pairing, enter its exact identifier.",
+        "description": "Heater: {name}. This profile supports next-generation iCOMM heat pumps; HPS10-80H45DV is the first tested model. For a new pairing, leave the identifier blank to generate one. To reuse a pairing, enter its exact identifier.",
         "data": {
           "pin": "Six-digit PIN",
           "pairing": "Pairing method",
@@ -68,10 +68,7 @@
         "description": "Controls and energy readings use Bluetooth. For HPS10-80H45DV firmware 6.4, choose HPS10 observed categories: raw 0 matches Medium (50%) and raw 5 matches High (100%). Other codes remain unknown. These percentages are category labels, not measured tank volume. Other models need comparison with iCOMM before choosing a scale. Enable Hot Water Plus only if your heater offers it.",
         "data": {
           "poll_interval": "Polling interval (seconds)",
-          "enable_setpoint_writes": "Enable temperature controls (up to heater's permitted maximum)",
-          "extended_readings": "Read remaining days and setpoint diagnostics",
           "enable_hot_water_plus": "Enable Hot Water Plus (supported models only)",
-          "energy_readings": "Read cumulative energy usage",
           "availability_scale": "Hot-water availability scale"
         }
       }
@@ -80,7 +77,7 @@
   "services": {
     "set_timed_mode": {
       "name": "Set timed mode",
-      "description": "Electric 1–99 days; Vacation 1–99 days or 100 for continuously on; Guest 1–7 days. APK-derived, requires device validation.",
+      "description": "Enter a mode and duration together: Electric 1–7 days, Vacation 1–99 days (100 means until changed), or Guest 1–7 days. Finite countdowns are APK-derived and not yet verified on hardware.",
       "fields": {
         "config_entry_id": {
           "name": "Water heater",

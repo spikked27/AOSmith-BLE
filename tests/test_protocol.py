@@ -88,7 +88,7 @@ def test_identifier_validation(identifier):
 
 
 @pytest.mark.parametrize(
-    "mode,days,expected", [("Vacation", 100, 0x6402), ("Guest", 7, 0x0703), ("Electric", 99, 0x6301)]
+    "mode,days,expected", [("Vacation", 100, 0x6402), ("Guest", 7, 0x0703), ("Electric", 7, 0x0701)]
 )
 def test_timed_modes(mode, days, expected):
     from custom_components.aosmith_ble.protocol import encode_timed_mode
@@ -98,7 +98,7 @@ def test_timed_modes(mode, days, expected):
 
 @pytest.mark.parametrize(
     "mode,days",
-    [("Guest", 8), ("Vacation", 0), ("Electric", 100), ("Hybrid", 1), ("Vacation", 1.5), ("Guest", True)],
+    [("Guest", 8), ("Vacation", 0), ("Electric", 8), ("Hybrid", 1), ("Vacation", 1.5), ("Guest", True)],
 )
 def test_invalid_timed_modes(mode, days):
     from custom_components.aosmith_ble.protocol import encode_timed_mode
@@ -110,23 +110,15 @@ def test_invalid_timed_modes(mode, days):
 @pytest.mark.parametrize(
     "raw,scale,expected",
     [
-        (0, "five_levels", 0),
-        (1, "five_levels", 20),
-        (2, "five_levels", 40),
-        (3, "five_levels", 60),
-        (4, "five_levels", 80),
-        (5, "five_levels", 100),
-        (6, "five_levels", None),
-        (255, "five_levels", None),
-        (-1, "five_levels", None),
-        (0, "percent_used", 100),
-        (100, "percent_used", 0),
-        (101, "percent_used", None),
-        (40, "percent_remaining", 40),
-        (101, "percent_remaining", None),
+        (5, "five_levels", None),
+        (0, "percent_used", None),
+        (40, "percent_remaining", None),
         (5, "unverified", None),
         (5, "unknown_profile", None),
-        (True, "five_levels", None),
+        (True, "hps10_observed", None),
+        (-5, "hps10_observed", None),
+        (251, "hps10_observed", None),
+        (65531, "hps10_observed", None),
     ],
 )
 def test_availability_never_guesses_or_clamps_invalid_values(raw, scale, expected):

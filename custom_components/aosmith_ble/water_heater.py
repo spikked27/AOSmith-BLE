@@ -23,10 +23,8 @@ class Heater(HeaterEntity, WaterHeaterEntity):
 
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, "water_heater")
-        self._setpoint_enabled = entry.options.get("enable_setpoint_writes", True)
         self._attr_supported_features = WaterHeaterEntityFeature.OPERATION_MODE
-        if self._setpoint_enabled:
-            self._attr_supported_features |= WaterHeaterEntityFeature.TARGET_TEMPERATURE
+        self._attr_supported_features |= WaterHeaterEntityFeature.TARGET_TEMPERATURE
 
     @property
     def target_temperature(self):
@@ -39,7 +37,7 @@ class Heater(HeaterEntity, WaterHeaterEntity):
     @property
     def supported_features(self):
         features = WaterHeaterEntityFeature.OPERATION_MODE
-        if self._setpoint_enabled and self.coordinator.data.mode != 2:
+        if self.coordinator.data.mode != 2:
             features |= WaterHeaterEntityFeature.TARGET_TEMPERATURE
         return features
 
@@ -53,8 +51,6 @@ class Heater(HeaterEntity, WaterHeaterEntity):
         await self.coordinator.async_set_value(MODE, value)
 
     async def async_set_temperature(self, **kwargs):
-        if not self._setpoint_enabled:
-            raise HomeAssistantError("Enable setpoint writes in integration options first")
         if self.coordinator.data.mode == 2:
             raise HomeAssistantError("Leave Vacation mode before changing the temperature")
         try:
@@ -80,6 +76,6 @@ class Heater(HeaterEntity, WaterHeaterEntity):
             "remote_temperature_maximum_f": self.max_temp,
             "mode_duration_raw": self.coordinator.data.mode_days,
             "vacation_selection": "On until changed",
-            "guest_selection": "1 day; use Mode duration to change it",
-            "duration_control": "Mode duration; available in Vacation, Guest and Electric",
+            "guest_selection": "1 day; use Set timed mode for another duration",
+            "vacation_control": "Choose days in Vacation to enter Vacation in one step",
         }

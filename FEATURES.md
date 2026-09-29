@@ -8,12 +8,12 @@ heat pumps, electric, gas, tankless and recirculation products with other maps.
 |---|---|---|
 | Local pairing and reconnect | Implemented; hardware tested | Additional models, proxy and pairing-slot tests |
 | Temperature and Electric/Hybrid/Heat Pump | Implemented; hardware tested | Wider model coverage |
-| Vacation/Guest/timed Electric | Device-page Mode duration and automation action; APK-derived | Physical display and remaining-days checks |
+| Vacation/Guest/timed Electric | One-step Vacation control and mode/days action; APK-derived | Physical display and remaining-days checks |
 | Hot Water Plus 0–3 | Implemented, opt-in BEST profile feature | Supported heater and mode interaction check |
 | Utility demand-response pause | Removed from product scope | Raw read-only research capture remains |
 | Advanced load-up flag | Removed from product scope | No utility writes exposed |
 | Utility enrollment device flag | Removed from product scope | No account enrollment |
-| Remaining days | Optional diagnostic sensors | Firmware-specific sentinels and availability |
+| Remaining days | Vacation control reads active countdown; other timed modes available through action | Firmware-specific sentinels and expiry |
 | Hot-water availability | Explicit HPS10 observed categories: raw 0 → 50%, raw 5 → 100%; raw attribute retained | Low code, recovery confirmation and other models |
 | Fault status | One Error status problem entity with readable current fault, including clock code 42 | Additional model/firmware validation |
 | Energy use and history | Local cumulative kWh sensor | Heating-cycle delta, reset behavior and other models |

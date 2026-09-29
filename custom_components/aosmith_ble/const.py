@@ -20,14 +20,24 @@ MIN_TEMP_F = 95
 MAX_TEMP_F = 150
 DEFAULT_MAX_TEMP_F = 140
 
-VERSION = "0.3.2.dev2"
+VERSION = "1.0.0"
 AVAILABILITY_SCALES = {
     "unverified": "Not calibrated",
     "hps10_observed": "HPS10 observed categories (0 = 50%, 5 = 100%)",
-    "five_levels": "0–5 levels (estimated 20% steps)",
-    "percent_remaining": "0–100 percent remaining",
-    "percent_used": "0–100 percent used (inverted)",
 }
+
+
+def clean_options(options):
+    """Retain only supported user preferences; never guess an old numeric scale."""
+    return {
+        CONF_INTERVAL: options.get(CONF_INTERVAL, DEFAULT_INTERVAL),
+        "availability_scale": options.get("availability_scale", "unverified")
+        if options.get("availability_scale") in AVAILABILITY_SCALES
+        else "unverified",
+        "enable_hot_water_plus": options.get("enable_hot_water_plus", False),
+    }
+
+
 ENERGY = (27, 7)
 MAX_SETPOINT = (1, 43)
 REMOTE_SETPOINT = (11, 6)

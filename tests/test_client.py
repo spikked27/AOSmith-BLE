@@ -391,3 +391,18 @@ async def test_missing_maximum_allows_lowering_but_not_increasing_temperature(cl
     assert not any(packet[1] == 0x40 for packet in peripheral.writes)
     state = await client.set_value(SETPOINT, encode_temperature(124))
     assert state.target_temperature == 124
+
+
+@pytest.mark.parametrize("word", [0x00FB, 0xFFFB])
+async def test_unknown_availability_keeps_full_word_without_creating_fault(word):
+    from custom_components.aosmith_ble.protocol import decode_availability
+
+    peripheral = FakePeripheral()
+    peripheral.registers[(27, 23)] = word
+    client = HeaterClient(peripheral.connect, "123456", IDENTIFIER)
+    state = await client.read_state()
+    assert state.availability == 251
+    assert state.availability_word == word
+    assert state.fault == 0
+    assert decode_availability(state.availability, "hps10_observed") is None
+    await client.disconnect()

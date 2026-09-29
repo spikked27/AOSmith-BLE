@@ -1,7 +1,7 @@
 """Exercise HA flow/entity APIs on an installed Home Assistant runtime."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.components.water_heater import WaterHeaterEntityFeature
@@ -10,7 +10,7 @@ from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.aosmith_ble.client import HeaterState
 from custom_components.aosmith_ble.config_flow import ConfigFlow, is_heater, suggested_pin
-from custom_components.aosmith_ble.const import DOMAIN, MODE, SERVICE_UUID, SETPOINT
+from custom_components.aosmith_ble.const import DOMAIN, MODE, SERVICE_UUID, SETPOINT, clean_options
 from custom_components.aosmith_ble.diagnostics import async_get_config_entry_diagnostics
 from custom_components.aosmith_ble.sensor import HeaterSensor
 from custom_components.aosmith_ble.water_heater import Heater
@@ -27,17 +27,14 @@ def coordinator():
     )
 
 
-async def test_entity_and_temperature_option(coordinator):
+async def test_temperature_controls_are_standard_and_validated(coordinator):
     heater = Heater(coordinator, SimpleNamespace(options={"enable_setpoint_writes": False}))
     assert heater.target_temperature == 125
     assert heater.current_temperature is None
     assert heater.current_operation == "Hybrid"
-    assert heater.supported_features == WaterHeaterEntityFeature.OPERATION_MODE
+    assert heater.supported_features & WaterHeaterEntityFeature.TARGET_TEMPERATURE
     await heater.async_set_operation_mode("Heat pump")
     coordinator.async_set_value.assert_awaited_once_with(MODE, 5)
-    with pytest.raises(HomeAssistantError):
-        await heater.async_set_temperature(temperature=120)
-    heater = Heater(coordinator, SimpleNamespace(options={"enable_setpoint_writes": True}))
     await heater.async_set_temperature(temperature=120)
     coordinator.async_set_value.assert_awaited_with(SETPOINT, 0x30E4)
     with pytest.raises(HomeAssistantError):
@@ -51,10 +48,6 @@ def test_sensors_preserve_raw_units(coordinator):
     assert availability.native_value is None
     assert availability.native_unit_of_measurement == "%"
     assert availability.extra_state_attributes["raw_value"] == 5
-    setpoint = HeaterSensor(coordinator, "target_temperature")
-    assert setpoint.native_value == 125
-    assert setpoint.native_unit_of_measurement == "°F"
-    assert setpoint.extra_state_attributes is None
 
 
 def test_discovery_recognizes_name_or_service():
@@ -246,7 +239,7 @@ def test_unknown_maximum_does_not_raise_fallback_to_150(coordinator):
 async def test_maximum_is_read_even_when_diagnostics_are_disabled(tmp_path):
     from unittest.mock import Mock
 
-    from custom_components.aosmith_ble.const import MAX_SETPOINT
+    from custom_components.aosmith_ble.const import ENERGY, MAX_SETPOINT
     from custom_components.aosmith_ble.coordinator import HeaterCoordinator
 
     hass = HomeAssistant(str(tmp_path))
@@ -259,7 +252,7 @@ async def test_maximum_is_read_even_when_diagnostics_are_disabled(tmp_path):
     )
     with patch("custom_components.aosmith_ble.coordinator.make_client", return_value=client):
         HeaterCoordinator(hass, entry)
-    assert client.optional_registers == {"maximum_setpoint": MAX_SETPOINT}
+    assert client.optional_registers == {"maximum_setpoint": MAX_SETPOINT, "energy_wh": ENERGY}
     await hass.async_stop()
 
 
@@ -288,12 +281,11 @@ async def test_timed_mode_service_targets_only_selected_heater(tmp_path, coordin
 async def test_optional_entities_handle_missing_data_and_exact_values(coordinator):
     from custom_components.aosmith_ble.const import HOT_WATER_PLUS
     from custom_components.aosmith_ble.select import HotWaterPlus
-    from custom_components.aosmith_ble.sensor import EnergySensor, ExtendedSensor
+    from custom_components.aosmith_ble.sensor import EnergySensor
 
     boost = HotWaterPlus(coordinator)
-    sensor = ExtendedSensor(coordinator, "vacation_days")
     energy = EnergySensor(coordinator)
-    for entity in [boost, sensor, energy]:
+    for entity in [boost, energy]:
         assert not entity.available
     assert energy.native_value is None
     coordinator.data = HeaterState(
@@ -308,7 +300,6 @@ async def test_optional_entities_handle_missing_data_and_exact_values(coordinato
         },
     )
     assert boost.current_option == "Level 2"
-    assert sensor.native_value == 100 and sensor.native_unit_of_measurement is None
     assert energy.native_value == 350.532
     assert energy.native_unit_of_measurement == "kWh"
     assert energy.state_class == "total_increasing"
@@ -328,7 +319,7 @@ async def test_optional_platforms_respect_model_options(tmp_path, coordinator):
     entities = []
     entry = SimpleNamespace(entry_id="test", options={})
     await select.async_setup_entry(hass, entry, entities.extend)
-    assert len(entities) == 1 and entities[0].name == "Mode duration"
+    assert len(entities) == 1 and entities[0].name == "Vacation"
     entities.clear()
     entry.options = {"enable_hot_water_plus": True}
     await select.async_setup_entry(hass, entry, entities.extend)
@@ -391,7 +382,11 @@ async def test_upgrade_retires_only_owned_demand_response_entities(tmp_path):
         patch.object(er, "async_get", return_value=registry),
         patch.object(er, "async_entries_for_config_entry", return_value=entities),
         patch("custom_components.aosmith_ble.HeaterCoordinator", return_value=coordinator),
-        patch.object(hass, "config_entries", SimpleNamespace(async_forward_entry_setups=AsyncMock())),
+        patch.object(
+            hass,
+            "config_entries",
+            SimpleNamespace(async_forward_entry_setups=AsyncMock(), async_update_entry=MagicMock()),
+        ),
     ):
         assert await async_setup_entry(hass, entry)
     registry.async_update_entity.assert_called_once_with(
@@ -401,7 +396,7 @@ async def test_upgrade_retires_only_owned_demand_response_entities(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "scale,expected", [("five_levels", 100), ("percent_used", 95), ("percent_remaining", 5)]
+    "scale,expected", [("hps10_observed", 100), ("unverified", None), ("five_levels", None)]
 )
 def test_availability_scale_is_explicit_and_keeps_raw_value(coordinator, scale, expected):
     coordinator.options = {"availability_scale": scale}
@@ -445,48 +440,58 @@ async def test_vacation_hides_temperature_editor_and_rejects_temperature_writes(
             await heater.async_set_temperature(temperature=invalid)
 
 
+@pytest.mark.parametrize("mode", [1, 2, 3, 4, 5])
 @pytest.mark.parametrize(
-    "mode,key,days,option,encoded",
-    [
-        (2, "vacation_days", 100, "Until changed", 0x6402),
-        (2, "vacation_days", 7, "7 days", 0x0702),
-        (2, "vacation_days", 99, "99 days", 0x6302),
-        (3, "guest_days", 1, "1 day", 0x0103),
-        (3, "guest_days", 7, "7 days", 0x0703),
-        (1, "electric_days", 0, "Until changed", 1),
-        (1, "electric_days", 99, "99 days", 0x6301),
-    ],
+    "option,encoded", [("1 day", 0x0102), ("7 days", 0x0702), ("99 days", 0x6302), ("Until changed", 0x6402)]
 )
-async def test_duration_device_control_reads_and_writes_active_mode(
-    coordinator, mode, key, days, option, encoded
-):
-    from custom_components.aosmith_ble.select import ModeDuration
+async def test_vacation_starts_with_duration_in_one_write(coordinator, mode, option, encoded):
+    from custom_components.aosmith_ble.select import Vacation
 
-    coordinator.data = HeaterState(125, mode, 5, 0, registers={key: days})
-    control = ModeDuration(coordinator)
+    coordinator.data = HeaterState(125, mode, 5, 0)
+    control = Vacation(coordinator)
     assert control.available
-    assert control.current_option == option
     await control.async_select_option(option)
     coordinator.async_set_value.assert_awaited_once_with(MODE, encoded, expected_mode=mode)
 
 
-async def test_duration_control_rejects_invalid_or_stale_values(coordinator):
-    from custom_components.aosmith_ble.select import ModeDuration
+@pytest.mark.parametrize(
+    "days,expected",
+    [
+        (1, "1 day"),
+        (7, "7 days"),
+        (99, "99 days"),
+        (100, "Until changed"),
+        (0, None),
+        (255, None),
+        (None, None),
+    ],
+)
+def test_vacation_uses_reported_countdown(coordinator, days, expected):
+    from custom_components.aosmith_ble.select import Vacation
 
-    control = ModeDuration(coordinator)
-    assert not control.available and control.current_option is None
-    with pytest.raises(HomeAssistantError):
-        await control.async_select_option("7 days")
-    coordinator.data = HeaterState(125, 3, 5, 0, registers={"vacation_days": 100})
-    assert control.available and control.current_option is None
-    for option in ("8 days", "Until changed", "0 days", "7", None):
+    coordinator.data = HeaterState(50, 2, 5, 0, registers={"vacation_days": days})
+    assert Vacation(coordinator).current_option == expected
+
+
+async def test_vacation_off_and_invalid_inputs(coordinator):
+    from custom_components.aosmith_ble.select import Vacation
+
+    control = Vacation(coordinator)
+    assert control.current_option == "Off"
+    await control.async_select_option("Off")
+    coordinator.async_set_value.assert_not_awaited()
+    for option in ("100 days", "0 days", "7", None):
         with pytest.raises(HomeAssistantError):
             await control.async_select_option(option)
-    coordinator.async_set_value.assert_not_awaited()
-    coordinator.data = HeaterState(125, 2, 5, 0, registers={"vacation_days": 0xFFFF})
-    assert control.current_option is None
+    coordinator.data = HeaterState(50, 2, 5, 0, registers={"vacation_days": 7})
+    await control.async_select_option("Off")
+    coordinator.async_set_value.assert_awaited_once_with(MODE, 4, expected_mode=2)
+    coordinator.async_set_value.reset_mock()
     coordinator.last_update_success = False
     assert not control.available
+    with pytest.raises(HomeAssistantError):
+        await control.async_select_option("7 days")
+    coordinator.async_set_value.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
@@ -540,7 +545,8 @@ async def test_tariff_removed_from_options_and_entity_setup(tmp_path, coordinato
         form = await flow.async_step_init()
         assert form["type"] == "form" and form["step_id"] == "settings"
         result = await flow.async_step_settings({"poll_interval": 60})
-        assert result["data"] == {"enable_setpoint_writes": False, "poll_interval": 60}
+        assert result["data"] == clean_options({"poll_interval": 60})
+        assert len(form["data_schema"].schema) == 3
     await hass.async_stop()
 
 
@@ -563,7 +569,7 @@ async def test_upgrade_removes_tariff_cache_and_retires_duplicate_entities(tmp_p
         SimpleNamespace(
             platform=DOMAIN, unique_id="address_" + key, entity_id="sensor." + key, disabled_by=None
         )
-        for key in ("tariff", "fault", "fault_present", "availability")
+        for key in ("tariff", "fault", "mode_duration", "target_temperature", "fault_present", "availability")
     ]
     config_entries = SimpleNamespace(async_forward_entry_setups=AsyncMock(), async_update_entry=MagicMock())
     coordinator = SimpleNamespace(
@@ -576,10 +582,14 @@ async def test_upgrade_removes_tariff_cache_and_retires_duplicate_entities(tmp_p
         patch.object(hass, "config_entries", config_entries),
     ):
         await async_setup_entry(hass, entry)
-    config_entries.async_update_entry.assert_called_once_with(entry, options={"poll_interval": 45})
+    config_entries.async_update_entry.assert_called_once_with(
+        entry, options=clean_options({"poll_interval": 45})
+    )
     assert registry.async_update_entity.call_args_list == [
         call("sensor.tariff", disabled_by=er.RegistryEntryDisabler.INTEGRATION),
         call("sensor.fault", disabled_by=er.RegistryEntryDisabler.INTEGRATION),
+        call("sensor.mode_duration", disabled_by=er.RegistryEntryDisabler.INTEGRATION),
+        call("sensor.target_temperature", disabled_by=er.RegistryEntryDisabler.INTEGRATION),
     ]
     await hass.async_stop()
 
@@ -593,7 +603,7 @@ async def test_failed_first_refresh_closes_client_and_leaves_no_loaded_entry(tmp
     from custom_components.aosmith_ble import async_setup_entry
 
     hass = HomeAssistant(str(tmp_path))
-    entry = SimpleNamespace(entry_id="test", options={})
+    entry = SimpleNamespace(entry_id="test", options=clean_options({}))
     coordinator = SimpleNamespace(
         async_config_entry_first_refresh=AsyncMock(side_effect=ConfigEntryNotReady),
         client=SimpleNamespace(disconnect=AsyncMock()),
@@ -611,14 +621,13 @@ async def test_failed_first_refresh_closes_client_and_leaves_no_loaded_entry(tmp
 
 
 def test_inactive_countdown_is_not_presented_as_current(coordinator):
-    from custom_components.aosmith_ble.sensor import ExtendedSensor
+    from custom_components.aosmith_ble.select import Vacation
 
+    control = Vacation(coordinator)
     coordinator.data = HeaterState(125, 4, 5, 0, registers={"vacation_days": 100, "guest_days": 2})
-    assert not ExtendedSensor(coordinator, "vacation_days").available
-    assert not ExtendedSensor(coordinator, "guest_days").available
+    assert control.current_option == "Off"
     coordinator.data = HeaterState(50, 2, 5, 0, registers={"vacation_days": 100, "guest_days": 2})
-    assert ExtendedSensor(coordinator, "vacation_days").available
-    assert not ExtendedSensor(coordinator, "guest_days").available
+    assert control.current_option == "Until changed"
 
 
 @pytest.mark.parametrize("raw,expected,category", [(0, 50, "Medium"), (5, 100, "High"), (1, None, "Unknown")])
@@ -631,3 +640,70 @@ def test_hps10_category_sensor_preserves_identity_and_uncertainty(coordinator, r
     assert sensor.extra_state_attributes["raw_value"] == raw
     assert sensor.unique_id == coordinator.address + "_availability"
     assert sensor.state_class is None
+
+
+async def test_release_entities_are_minimal_with_opt_in_debug(tmp_path, coordinator):
+    from custom_components.aosmith_ble import binary_sensor, button, select, sensor, water_heater
+
+    hass = HomeAssistant(str(tmp_path))
+    hass.data[DOMAIN] = {"test": coordinator}
+    entry = SimpleNamespace(entry_id="test", options={})
+    entities = []
+    for platform in (binary_sensor, button, select, sensor, water_heater):
+        await platform.async_setup_entry(hass, entry, entities.extend)
+    normal = [e for e in entities if e.entity_registry_enabled_default]
+    debug = [e for e in entities if not e.entity_registry_enabled_default]
+    assert len(normal) == 5 and len(debug) == 3
+    assert all(e.entity_category is None for e in normal)
+    assert {e.action for e in debug} == {"refresh", "reconnect", "inspect"}
+    await hass.async_stop()
+
+
+async def test_debug_default_migration_runs_once_and_preserves_pairing(tmp_path):
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.aosmith_ble import async_migrate_entry
+
+    hass = HomeAssistant(str(tmp_path))
+    credentials = {"pairing_identifier": "HA0000000000000001", "pin": "123456"}
+    entry = SimpleNamespace(
+        entry_id="test",
+        version=1,
+        minor_version=1,
+        options={"availability_scale": "five_levels", "extended_readings": True},
+        data=credentials,
+    )
+    registry = MagicMock()
+    owned = SimpleNamespace(
+        platform=DOMAIN,
+        domain="button",
+        unique_id="address_refresh",
+        entity_id="button.refresh",
+        disabled_by=None,
+    )
+    unrelated = SimpleNamespace(
+        platform="other",
+        domain="button",
+        unique_id="address_refresh",
+        entity_id="button.other",
+        disabled_by=None,
+    )
+    config_entries = SimpleNamespace(async_update_entry=MagicMock())
+    with (
+        patch.object(er, "async_get", return_value=registry),
+        patch.object(er, "async_entries_for_config_entry", return_value=[owned, unrelated]),
+        patch.object(hass, "config_entries", config_entries),
+    ):
+        assert await async_migrate_entry(hass, entry)
+        registry.async_update_entity.assert_called_once_with(
+            "button.refresh", disabled_by=er.RegistryEntryDisabler.INTEGRATION
+        )
+        config_entries.async_update_entry.assert_called_once_with(
+            entry, minor_version=2, options=clean_options({})
+        )
+        entry.minor_version = 2  # User can now re-enable the button permanently.
+        registry.reset_mock()
+        assert await async_migrate_entry(hass, entry)
+        registry.async_update_entity.assert_not_called()
+    assert entry.data == credentials
+    await hass.async_stop()

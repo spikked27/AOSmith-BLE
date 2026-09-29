@@ -17,5 +17,5 @@ class HeaterEntity(CoordinatorEntity):
             connections={(CONNECTION_BLUETOOTH, coordinator.address)},
             name="AO Smith water heater",
             manufacturer="AO Smith",
-            model="iCOMM next-generation heat pump (experimental)",
+            model="iCOMM next-generation heat pump",
         )

@@ -1,4 +1,15 @@
-# Unreleased — 0.3.2.dev2
+# 1.0.0 — September 29, 2026
+
+- One-step Vacation control replaces the draft two-step duration flow.
+- Restrict timed Electric to the HPS10 manual’s 1–7 days.
+- Remove speculative availability scales, redundant entities and unused options.
+- Keep temperature, energy and active countdown reads enabled automatically.
+- Default debug buttons off, with one-time upgrade migration; retain pairing/history.
+- Preserve the full availability word; no unsupported Low/-5 interpretation.
+- Document release scope, installation, upgrades, debugging and hardware limits.
+- Publish versioned install archives after automated checks.
+
+# Development history — 0.3.2.dev2
 
 - Add device-page Mode duration for Vacation, Guest and Electric, with explicit
   Until changed options and mode-specific limits. Display the active countdown.

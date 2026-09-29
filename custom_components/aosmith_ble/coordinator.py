@@ -22,7 +22,6 @@ from .const import (
     INSPECT_REGISTERS,
     MAX_SETPOINT,
     NAME,
-    OPTIONAL_REGISTERS,
 )
 from .protocol import ProtocolError
 
@@ -58,12 +57,9 @@ class HeaterCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, entry):
         self.client = make_client(hass, entry.data)
         self.options = dict(entry.options)
-        # This governs the temperature control, regardless of diagnostic options.
+        # Core controls and readings always request their supporting registers.
         self.client.optional_registers["maximum_setpoint"] = MAX_SETPOINT
-        if entry.options.get("energy_readings", True):
-            self.client.optional_registers["energy_wh"] = ENERGY
-        if entry.options.get("extended_readings", True):
-            self.client.optional_registers.update(OPTIONAL_REGISTERS)
+        self.client.optional_registers["energy_wh"] = ENERGY
         if entry.options.get("enable_hot_water_plus", False):
             self.client.optional_registers["hot_water_plus"] = HOT_WATER_PLUS
         self.address = entry.data[CONF_ADDRESS]

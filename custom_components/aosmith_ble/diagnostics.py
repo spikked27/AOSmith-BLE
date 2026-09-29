@@ -5,7 +5,7 @@ from dataclasses import asdict
 from homeassistant.const import __version__ as ha_version
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, VERSION
+from .const import DOMAIN, VERSION, clean_options
 from .faults import fault_details
 
 
@@ -15,11 +15,7 @@ async def async_get_config_entry_diagnostics(hass, entry):
         "integration_version": VERSION,
         "home_assistant_version": ha_version,
         "protocol_profile": "next_gen_heat_pump",
-        "options": {
-            key: value
-            for key, value in entry.options.items()
-            if key not in {"tariff", "enable_utility_controls"}
-        },
+        "options": clean_options(entry.options),
         "host_clock": {"utc": dt_util.utcnow().isoformat(), "time_zone": hass.config.time_zone},
         "clock_sync": "Not implemented; fault 42 reports clock not set, not clock accuracy",
         "heater_error": fault_details(coordinator.data.fault)

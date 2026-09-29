@@ -67,7 +67,7 @@ that every model implements every register.
 | 11:19 | Electric remaining days | Low byte |
 | 11:20 | Hot Water Plus | 0–3; BEST family only, opt-in |
 | 27:3 | Utility override / demand-response pause | Write 0000 or 0001 |
-| 27:7–9 | Electric power usage words 2,1,0 | Read-only diagnostic capture, units unknown |
+| 27:7–9 | Electric power usage words 2,1,0 | 48-bit Wh, exposed as kWh |
 | 27:10–12 | Grid present energy words 2,1,0 | Read-only diagnostic capture, units unknown |
 | 27:13–15 | Grid total energy words 2,1,0 | Read-only diagnostic capture, units unknown |
 | 27:25 | CTA utility module present | Low byte boolean, read only |
@@ -125,8 +125,8 @@ low byte of 27:23 unchanged. It does not establish a 0–5 percentage scale. The
 public cloud client uses a different numeric convention (`100 - hotWaterStatus`):
 https://github.com/bdr99/py-aosmith/blob/8d4eb7f1b75e1898227810ff9d007d8fd3291434/py_aosmith/client.py
 Neither path proves that the two fields share a scale. Thus the integration
-requires explicit per-entry calibration. The 0–5 conversion is offered as an
-estimate, not silently selected as a device fact. Out-of-range bytes never
+requires explicit per-entry calibration. The speculative 0–5 conversion was removed in 1.0.0; only the observed HPS10
+categories remain as an explicit calibration choice. Out-of-range bytes never
 produce a fabricated percentage; raw bytes remain available for investigation.
 
 The owner’s 0.3.0 captures confirm request BDA0071B0703D8 and response
@@ -136,16 +136,16 @@ fixture verifies this exact grouped response. Candidate clock words 26:3 and
 read ACK alone does not confirm register meaning or support for clock writes.
 
 
-## Unreleased duration verification and clock call path
+## Duration verification and clock call path
 
-The device-page duration selector targets only the currently active timed mode.
+The Vacation selector enters Vacation and sets duration in a single write.
+Selecting Off exits to Hybrid.
 The transport rereads 11:15 inside its lock before writing. A differing mode
 aborts without mutation. Exact command-word readback still confirms a write;
 when 11:15 returns only the requested low-byte mode, its corresponding
 remaining-days status (11:17/18/19) must also equal the requested duration.
 This second confirmation path is simulated, not yet observed on the owner's
-hardware. No unconfirmed write is replayed. Normal polling reads the active
-countdown even when optional diagnostic reads are disabled.
+hardware. No unconfirmed write is replayed. Normal polling always reads the active countdown.
 
 The app connection generator #13456 checks `heatPump` before calling
 `setEssentialParams` (#13493), which invokes `setClock` (#14611). Bytecode offsets
@@ -179,3 +179,17 @@ the semantic association comes from nearby owner app/official-HA screenshots,
 not from an APK-defined BLE enum. All other values remain unknown. See
 RESEARCH.md for timestamps and model/firmware scope. Never treat every unknown
 code as Low, nor treat Low as a heater fault.
+
+
+## Version 1.0.0 limits and Low availability
+
+The integration limits timed Electric to the HPS10 manual's 1–7 days, despite
+broader generic app choices. Vacation allows 1–99 or 100 (indefinite); Guest 1–7.
+The public action validates these ranges before issuing a write.
+
+The APK's `hexToInt` helper uses `parseInt(value, 16)`; the next-generation
+WATER_AVAILABLE path selects the low byte without signed conversion. A signed
+8-bit -5 would appear as 251 (0xFB); a signed 16-bit -5 as 65531 (0xFFFB), still
+251 after the app's low-byte extraction. Neither has an established Low meaning.
+The full raw word is now retained as `state.availability_word` in diagnostics.
+No unknown availability code is converted to an error or guessed percentage.

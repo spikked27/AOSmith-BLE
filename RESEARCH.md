@@ -182,3 +182,34 @@ Energy progressed from 350.532 to 350.646 kWh across the captures; this supports
 counter progression but does not independently calibrate its accuracy. No new
 finite-duration or development-upgrade validation was supplied: the diagnostics
 still identify installed version 0.3.1. The new code passes 129 local tests.
+
+
+## Release review — 1.0.0
+
+This section supersedes earlier development-only UI and scale choices above.
+The release removes speculative linear/inverted scales, duplicate diagnostic
+sensors and their configuration switches. HPS10 observed categories remain
+explicitly selected. Vacation becomes one selection of days that both enters
+the mode and starts its countdown. Electric's finite duration is restricted to
+the model manual's 1–7 days. Debug buttons default disabled, including a one-time
+upgrade migration. Core temperature/energy/countdown reads are always enabled.
+
+### Is Low availability an error, or -5?
+
+The product-linked owner's manual, printed page 25, lists **Not Enough Hot Water**
+under **No Error Code Displayed**, with usage, leaks and mode among possible causes.
+That supports treating availability separately from a heater fault, not inventing
+a fault when a new availability code appears. Some manufacturer material describes
+low-hot-water alerts; an app alert does not establish an error-register code.
+
+The inspected next-generation APK fault catalog has no Low availability entry.
+The WATER_AVAILABLE parser takes the low byte, then `hexToInt` uses
+`parseInt(value, 16)` without sign extension. A relevant source search found no
+mapping from -5 to Low. A separate literal -5 in unrelated code is a bit mask.
+Signed -5 remains a hypothesis, not a supported conversion: 0xFB would parse as
+251, while 0xFFFB would also yield low byte 251. Both the full raw word and byte
+are retained in diagnostics; neither is mapped to Low or an error in this release.
+
+Sources: [owner's manual, printed page 25](https://www.aosmithatlowes.com/media/1712/2000604721.pdf)
+and the local iCOMM 14.1.0 next-generation parser/helper/fault catalog described above.
+No additional water depletion or hardware experiment was requested.
