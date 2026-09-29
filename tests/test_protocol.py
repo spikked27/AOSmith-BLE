@@ -108,23 +108,12 @@ def test_invalid_timed_modes(mode, days):
 
 
 @pytest.mark.parametrize(
-    "raw,scale,expected",
-    [
-        (5, "five_levels", None),
-        (0, "percent_used", None),
-        (40, "percent_remaining", None),
-        (5, "unverified", None),
-        (5, "unknown_profile", None),
-        (True, "hps10_observed", None),
-        (-5, "hps10_observed", None),
-        (251, "hps10_observed", None),
-        (65531, "hps10_observed", None),
-    ],
+    "raw,expected", [(0, 50), (5, 100), (True, None), (-5, None), (251, None), (65531, None)]
 )
-def test_availability_never_guesses_or_clamps_invalid_values(raw, scale, expected):
+def test_availability_defaults_to_observed_hps10_categories(raw, expected):
     from custom_components.aosmith_ble.protocol import decode_availability
 
-    assert decode_availability(raw, scale) == expected
+    assert decode_availability(raw) == expected
 
 
 def test_confirmed_grouped_energy_response():
@@ -145,11 +134,11 @@ def test_observed_hps10_availability_frames(frame_hex, expected):
     from custom_components.aosmith_ble.protocol import decode_availability
 
     raw = read_value(bytes.fromhex(frame_hex), 27, 23)
-    assert decode_availability(raw, "hps10_observed") == expected
+    assert decode_availability(raw) == expected
 
 
 @pytest.mark.parametrize("raw", [-1, 1, 2, 3, 4, 6, 255, True, None])
 def test_hps10_unobserved_availability_is_unknown(raw):
     from custom_components.aosmith_ble.protocol import decode_availability
 
-    assert decode_availability(raw, "hps10_observed") is None
+    assert decode_availability(raw) is None

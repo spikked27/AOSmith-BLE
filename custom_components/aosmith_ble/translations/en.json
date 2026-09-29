@@ -65,11 +65,10 @@
     "step": {
       "settings": {
         "title": "Controls and readings",
-        "description": "Controls and energy readings use Bluetooth. For HPS10-80H45DV firmware 6.4, choose HPS10 observed categories: raw 0 matches Medium (50%) and raw 5 matches High (100%). Other codes remain unknown. These percentages are category labels, not measured tank volume. Other models need comparison with iCOMM before choosing a scale. Enable Hot Water Plus only if your heater offers it.",
+        "description": "Local Bluetooth settings. Temperature controls and energy readings are always enabled. Hot-water availability uses the tested HPS10 categories automatically. Enable Hot Water Plus only if your heater offers it.",
         "data": {
           "poll_interval": "Polling interval (seconds)",
-          "enable_hot_water_plus": "Enable Hot Water Plus (supported models only)",
-          "availability_scale": "Hot-water availability scale"
+          "enable_hot_water_plus": "Enable Hot Water Plus (supported models only)"
         }
       }
     }

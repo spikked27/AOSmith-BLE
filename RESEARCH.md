@@ -213,3 +213,31 @@ are retained in diagnostics; neither is mapped to Low or an error in this releas
 Sources: [owner's manual, printed page 25](https://www.aosmithatlowes.com/media/1712/2000604721.pdf)
 and the local iCOMM 14.1.0 next-generation parser/helper/fault catalog described above.
 No additional water depletion or hardware experiment was requested.
+
+
+## 1.1.0 correction: shrinking setpoint maximum and final UI
+
+The owner reported that lowering 125°F to 124°F also lowered the UI maximum to
+124°F, blocking a return to 125°F. The 1.0.0 fallback explicitly used the current
+setpoint as a ceiling when maximum data was unavailable; it could produce exactly
+this failure. This supersedes the earlier decision to treat that fallback or
+register 1:43 as an established remote safety allowance for this profile.
+
+Version 1.1.0 uses the manufacturer's documented 95–150°F HPS10 range, independent
+of current setting and register 1:43. It still checks Vacation mode live and
+requires exact write readback. The register is retained in manual diagnostics
+for investigation, not written or used to impose a moving limit. No change to
+firmware safety controls is attempted. Hardware acceptance of values above 125°F
+has not yet been verified; failures will remain explicit instead of being called
+successful writes.
+
+The requested UI now follows active Vacation/Guest mode, defaulting HA mode-entry
+to 7/1 days respectively. Other modes show Off. Availability uses observed HPS10
+0→50% and 5→100% directly, with no calibration option. Unknown codes remain unknown.
+Retired entity-registry entries are removed without issuing a recorder purge.
+
+Tariff restoration was withdrawn by the owner. There is no tariff request/cache
+or programming flow. An offline heater cannot receive new tariff data from the
+service; the currentness of stored schedules, price data and holidays is not
+established. Clock fault 42 includes recommended Internet/iCOMM recovery steps,
+but clearing that fault is not proof of a current tariff or correct timezone.

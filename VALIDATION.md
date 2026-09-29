@@ -1,7 +1,7 @@
-# Version 1.0.0 validation
+# Version 1.1.0 validation
 
 Reviewed September 29, 2026. Local environment: Python 3.13.15 and Home Assistant
-2025.12.5 with its Bluetooth/USB dependencies. **145 automated tests pass locally**, with Ruff lint and formatting checks passing.
+2025.12.5 with its Bluetooth/USB dependencies. **142 automated tests pass locally**, with Ruff lint and formatting checks passing.
 Automated checks use captured
 protocol fixtures and a simulated peripheral, not physical Bluetooth. See the
 GitHub Tests workflow for the release commit's results.
@@ -12,18 +12,19 @@ GitHub Tests workflow for the release commit's results.
   identifier validation and reuse without duplicate enrollment.
 - Serialized requests, read recovery, stale-notification rejection, failed-setup
   and unload cleanup, and no automatic write replay.
-- One-step Vacation selection from every supported mode, duration bounds,
-  indefinite sentinel, Off-to-Hybrid, stale-mode guard and device countdown
+- Mode-aware Vacation/Guest duration selection, duration bounds,
+  Vacation 7-day/Guest 1-day defaults, indefinite sentinel, Off-to-Hybrid, stale-mode guard and device countdown
   readback. A targeted mode/days action supports Guest and Electric as well.
-- Temperature editor and writes respect Vacation mode and live remote limits
-  through 150°F. An unknown maximum cannot authorize an increase.
+- Temperature editor and writes respect Vacation mode and the documented
+  95–150°F range. Regression tests lower 125→124, then raise to 125/140/150
+  with missing, invalid or setpoint-mirroring maximum-register values.
 - Error status includes clock code 42, keeps unknown faults explicit and becomes
   unavailable after failed polls.
 - Grouped 48-bit energy reads, optional-read backoff and unknown data handling;
   captured HPS10 High/Medium frames; unsupported availability codes remain unknown.
 - Five default entities; three disabled debug buttons; one-time debug migration
-  that allows later user opt-in; old options and duplicate entities retired
-  without changing pairing credentials or deleting history.
+  that allows later user opt-in; old options cleared and retired registry entries removed
+  without changing pairing credentials or purging recorder history.
 - Redacted diagnostics with bounded event/command histories and full availability
   word preservation, including hypothetical signed -5 representations.
 - Manifest, HACS layout, English strings, action schema and release packaging.
@@ -47,8 +48,8 @@ On HPS10-80H45DV, reported firmware 6.4:
 ## Release limitations
 
 Finite Vacation/Guest/Electric countdowns, expiry and recovery are software-tested
-but not physically validated. The one-step Vacation UI and migration are new in
-this release. The manual describes nine hours of Vacation recovery; Electric is
+but not physically validated. The revised Vacation/Guest UI and temperature ceiling fix are new in
+this release. Temperature increases above 125°F still need hardware confirmation. The manual describes nine hours of Vacation recovery; Electric is
 limited to its documented 1–7 days. No claimed exact return time or power-loss
 countdown persistence is inferred from the command encoding.
 

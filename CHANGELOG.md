@@ -1,3 +1,16 @@
+# 1.1.0 — September 29, 2026
+
+- Fix the shrinking temperature ceiling: use the documented 95–150°F HPS10 range,
+  independent of the current setpoint and unverified maximum-register behavior.
+- Make Vacation/Guest mode a duration dropdown following the selected mode;
+  default Vacation to 7 days and Guest to 1, with Off in other modes.
+- Default availability to HPS10 categories and remove calibration configuration.
+- Remove retired entity-registry entries automatically; leave current debug
+  controls disabled by default without purging recorder history or pairing.
+- Add Internet/iCOMM recovery guidance for clock fault 42, with verification.
+- Keep tariffs out and explain stale offline schedule/rate limitations.
+- Rewrite installation and everyday-use documentation.
+
 # 1.0.0 — September 29, 2026
 
 - One-step Vacation control replaces the draft two-step duration flow.

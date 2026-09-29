@@ -15,25 +15,18 @@ SETPOINT = (11, 0)
 MODE = (11, 15)
 AVAILABILITY = (27, 23)
 FAULT = (2, 7)
-# HPS10 manual permits 150 F; remote control still honors the reported maximum.
+# Documented HPS10 setpoint range. Register 1:43 is not used as a write ceiling.
 MIN_TEMP_F = 95
 MAX_TEMP_F = 150
-DEFAULT_MAX_TEMP_F = 140
 
-VERSION = "1.0.0"
-AVAILABILITY_SCALES = {
-    "unverified": "Not calibrated",
-    "hps10_observed": "HPS10 observed categories (0 = 50%, 5 = 100%)",
-}
+VERSION = "1.1.0"
+DEFAULT_MODE_DAYS = {2: 7, 3: 1}
 
 
 def clean_options(options):
-    """Retain only supported user preferences; never guess an old numeric scale."""
+    """Drop retired controls, tariff cache and availability calibration."""
     return {
         CONF_INTERVAL: options.get(CONF_INTERVAL, DEFAULT_INTERVAL),
-        "availability_scale": options.get("availability_scale", "unverified")
-        if options.get("availability_scale") in AVAILABILITY_SCALES
-        else "unverified",
         "enable_hot_water_plus": options.get("enable_hot_water_plus", False),
     }
 

@@ -29,7 +29,8 @@ async def async_setup_entry(hass, entry):
     if options != entry.options:
         hass.config_entries.async_update_entry(entry, options=options)
 
-    # Retire only this integration's removed entities; preserve history.
+    # Remove only explicitly retired entities owned by this config entry.
+    # Do not purge recorder history or remove current opt-in diagnostic buttons.
     registry = er.async_get(hass)
     retired = {"utility_override", "advanced_load", "utility_enrollment", "cta_present"}
     retired |= {key + "_control" for key in retired}
@@ -46,10 +47,7 @@ async def async_setup_entry(hass, entry):
     }
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
         if entity.platform == DOMAIN and any(entity.unique_id.endswith("_" + key) for key in retired):
-            if entity.disabled_by is None:
-                registry.async_update_entity(
-                    entity.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
-                )
+            registry.async_remove(entity.entity_id)
     coordinator = HeaterCoordinator(hass, entry)
     try:
         await coordinator.async_config_entry_first_refresh()

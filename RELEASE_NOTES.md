@@ -1,38 +1,40 @@
-## AO Smith Local BLE 1.0.0
+## AO Smith Local BLE 1.1.0
 
-Local Home Assistant control for compatible next-generation iCOMM heat pumps,
-with HPS10-80H45DV firmware 6.4 as the hardware-tested model.
+### Fixes and changes
 
-- **One-step Vacation:** choose days to enter Vacation and set its timer together.
-  Until changed stays in Vacation; Off returns to Hybrid.
-- Native mode and temperature controls follow the live heater maximum, up to
-  150°F. Active countdown and energy reads are automatic.
-- Five everyday entities: water heater, Vacation, hot-water availability, energy
-  usage and Error status. Hot Water Plus remains opt-in for supported models.
-- One Error status indicator includes clock-not-set code 42. No speculative clock,
-  tariff or demand-response writes.
-- Refresh, reconnect and inspection buttons disabled by default; enable them when
-  debugging. Redacted diagnostics preserve command outcomes and raw readings.
-- Obsolete settings and duplicate entities retired; existing pairing is retained.
+- Fix the temperature ceiling following the current setpoint downward. The HPS10
+  temperature editor now uses a stable 95–150°F range. Every write still requires
+  heater readback confirmation; Vacation's temperature guard remains.
+- Change the duration control to **Vacation/Guest mode**. Select the mode on the
+  water-heater entity first: Vacation starts at 7 days, Guest at 1 day. Adjust its
+  duration in the dropdown. Other operating modes show Off; choosing Off exits
+  to Hybrid.
+- Use HPS10 hot-water availability categories automatically (High 100%, Medium
+  50%). Remove the calibration option. Unknown codes remain unknown.
+- Automatically remove obsolete diagnostic/duplicate entity-registry entries
+  instead of leaving them disabled. Current debug buttons remain opt-in. Existing
+  pairing and recorder history are not purged.
+- Add recommended recovery steps to clock fault 42: connect through the official
+  iCOMM app with Internet access, then verify the fault clears.
+- Rewrite the README for installation, setup, everyday controls and troubleshooting.
 
-### Upgrade
+Tariff lookup/programming remains excluded. Offline heaters cannot receive new
+service tariff data; stored schedules are not verified or refreshed by this
+integration. Whether iCOMM automatically updates an existing plan is unverified.
 
-Update in HACS and **restart Home Assistant**. Do not remove/re-pair the heater.
-For HPS10, choose **Configure → Hot-water availability scale → HPS10 observed
-categories**: High = 100%, Medium = 50%. Old speculative scales reset to Not
-calibrated. The Low wire code is unknown; no evidence establishes -5 as Low or a
-fault. Unknown availability values remain unknown.
+### Update
 
-The draft Mode duration entity is replaced by Vacation. Adjust any automations
-using that draft entity; the Set timed mode action remains available. Debug buttons
-are disabled once on upgrade, and later user enabling is preserved.
+Download 1.1.0 in HACS and restart Home Assistant. Keep your current integration
+and pairing. No availability configuration or manual entity purge is needed.
+Remove any user-created dashboard cards/automations targeting retired entities.
+The existing Vacation control keeps its unique ID and is renamed Vacation/Guest
+mode unless you supplied a custom name.
 
-### Known limits
+### Validation
 
-Finite Vacation/Guest/Electric countdowns and the new duration UI are software-tested,
-not yet hardware-validated. Additional models and active proxy transport remain
-unverified. Clock synchronization and heater-owned tariff scheduling are outside
-this release; use iCOMM for utility setup. See VALIDATION.md for the evidence.
-
-Install through the HACS custom repository, or extract the attached ZIP's
-custom_components/aosmith_ble folder into /config/custom_components/aosmith_ble.
+142 automated tests, Ruff checks and archive validation pass locally. Regression
+coverage includes lowering from 125 to 124 then raising to 125/140/150, mode-aware
+durations, clock guidance and removal of only owned retired entities. Temperature
+writes above 125 and finite countdown expiry still need physical confirmation;
+software tests are not hardware validation. HPS10-80H45DV firmware 6.4 remains
+the tested model. Additional models/proxies and Hot Water Plus remain unverified.

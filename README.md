@@ -1,46 +1,104 @@
 # AO Smith Local BLE
 
-Control a compatible A. O. Smith water heater locally from Home Assistant over
-Bluetooth. No AO Smith account or Internet connection is required for these
-controls. Install **v1.0.0** through HACS as a custom repository.
+A custom Home Assistant integration for controlling compatible A. O. Smith iCOMM
+heat-pump water heaters over Bluetooth. Change temperature and operating mode,
+set Vacation/Guest duration, and monitor hot-water availability, energy use and
+heater errors without an AO Smith account or cloud connection.
 
-Tested on **HPS10-80H45DV, firmware 6.4**. Other next-generation iCOMM heat pumps
-may share this protocol but are not yet verified. Older iCOMM families use
-different register maps and are not supported. This is an independent project,
-not affiliated with A. O. Smith.
+**Tested hardware:** HPS10-80H45DV, firmware 6.4. Other next-generation iCOMM
+heaters may be compatible but have not been verified. Older iCOMM families use
+different protocols. This project is independent of A. O. Smith.
 
-## Everyday controls
+## What you get
 
-| Entity | Function |
+| Entity | What it does |
 |---|---|
-| Water heater | Temperature and Electric, Hybrid, Heat pump, Vacation or Guest mode |
-| Vacation | Choose days to enter Vacation in one step; shows the heater's remaining days |
-| Hot water availability | Observed HPS10 High/100% and Medium/50% categories |
-| Energy usage | Cumulative local kWh, usable in Home Assistant's Energy dashboard |
-| Error status | Current heater fault, with a description; includes clock-not-set code 42 |
+| Water heater | Sets temperature and selects Hybrid, Heat pump, Electric, Vacation or Guest |
+| Vacation/Guest mode | Adjusts the active Vacation or Guest countdown; shows Off in other modes |
+| Hot water availability | High = 100%, Medium = 50%, using the observed HPS10 mapping |
+| Energy usage | Cumulative electricity use in kWh; supports the HA Energy dashboard |
+| Error status | Indicates a reported heater fault and provides its description and code |
 
-Hot Water Plus is an optional control for models that offer it. Debug buttons
-are disabled by default. There are no duplicate temperature/countdown sensors,
-tariff entities, or demand-response controls.
+Hot Water Plus can be enabled for models that support it. Diagnostic buttons are
+available when needed and disabled by default. No tariff or demand-response
+controls are included.
 
-### Vacation in one step
+## Requirements
 
-On the device page, open **Vacation** and select **7 days**, for example.
-That single selection enters Vacation and sets the timer together. You do not
-need to change the water-heater mode first.
+- Home Assistant 2025.12 or newer.
+- A supported local Bluetooth adapter, or an ESPHome Bluetooth proxy with active
+  connections enabled, within range of the heater. Proxy support uses HA's
+  Bluetooth infrastructure but has not been tested with this heater yet.
+- Bluetooth enabled on the water heater and its six-digit pairing PIN.
 
-- **1–99 days:** start or restart the heater's countdown.
-- **Until changed:** stay in Vacation indefinitely.
-- **Off:** leave Vacation and select Hybrid. If already outside Vacation, do nothing.
+No proprietary APK is needed. Normal heater control and polling are local;
+installing and downloading updates requires Internet access.
 
-The control displays the device's reported countdown, not an HA expiry timer.
-The HPS10 manual describes returning to the previous mode with nine hours left
-for recovery; do not interpret the timer as an exact return timestamp. Choosing
-Vacation in the native water-heater mode menu still means **Until changed**.
+## Install with HACS
 
-For automations, or timed Guest/Electric operation, use **AO Smith Local BLE:
-Set timed mode**. It accepts mode and days in one action: Guest/Electric 1–7,
-Vacation 1–99, or Vacation 100 for indefinite operation.
+This integration is installed as a **custom repository**:
+
+1. Open **HACS → ⋮ → Custom repositories**.
+2. Add `https://github.com/spikked27/AOSmith-BLE` and choose **Integration**.
+3. Find **AO Smith Local BLE** in HACS and download the latest release.
+4. Restart Home Assistant.
+5. Open **Settings → Devices & services → Add integration → AO Smith Local BLE**.
+
+For manual installation, download `aosmith_ble.zip` from
+[Releases](https://github.com/spikked27/AOSmith-BLE/releases), place its
+`custom_components/aosmith_ble` folder in `/config/custom_components/`, and
+restart Home Assistant.
+
+## Connect your heater
+
+1. Enable Bluetooth using the heater's controls. Close iCOMM and disconnect
+   nRF Connect or other apps so they release the connection.
+2. Select the discovered heater. If it does not appear, retry the scan or enter
+   its Bluetooth address manually.
+3. Check the suggested six-digit PIN against your heater's pairing information.
+4. For a new installation, choose **Create a new local pairing** and leave the
+   identifier blank. Save the identifier displayed on the confirmation page.
+5. Confirm setup. The integration connects and reads the heater before creating
+   the device. Setup does not change temperature or mode.
+
+If you already enrolled an identifier, choose **Reuse an existing local pairing**
+and enter it exactly. If enrollment times out, retry the same flow; do not keep
+creating new identifiers. Existing heater pairings are never deleted. HA backups
+preserve the credentials needed to reconnect.
+
+## Everyday use
+
+### Temperature and operating mode
+
+Open the water-heater entity to select a mode or set the temperature. The
+supported HPS10 range is **95–150°F**. The ceiling stays fixed when you lower the
+setpoint; no temperature-enable or maximum-temperature setting is needed.
+Commands are checked against the heater's readback before success is reported.
+The temperature shown is the **setpoint**, not measured tank temperature.
+
+Vacation maintains its own low temperature, so temperature adjustment is hidden
+until you leave Vacation. Selecting a mode does not indicate whether the
+compressor or heating elements are currently running; that status is not decoded.
+
+### Vacation and Guest duration
+
+1. Select **Vacation** or **Guest** on the water-heater entity.
+2. The **Vacation/Guest mode** dropdown follows the selected mode and shows its
+   reported duration. Selecting Vacation in HA starts **7 days**; Guest starts
+   **1 day**.
+3. Adjust the dropdown: Vacation supports **1–99 days** or **Until changed**;
+   Guest supports **1–7 days**.
+4. Select Hybrid, Heat pump or Electric on the water heater to leave the timed
+   mode. The duration dropdown returns to **Off**. Choosing Off in the dropdown
+   also exits the timed mode, selecting Hybrid.
+
+Changing days restarts the active mode's countdown. The heater owns the timer;
+HA does not emulate an expiry timestamp. Changes made at the heater or in iCOMM
+appear after the next poll. Missing countdown data is unknown, not an invented
+remaining duration. Finite countdown expiry remains hardware-unverified.
+
+For automations, **AO Smith Local BLE: Set timed mode** sets mode and duration
+in one action. It also supports timed Electric for 1–7 days:
 
 ```yaml
 action: aosmith_ble.set_timed_mode
@@ -50,113 +108,96 @@ data:
   days: 7
 ```
 
-Finite countdown encoding and confirmation are software-tested and APK-derived;
-physical countdown/expiry behavior remains unverified. Selecting Guest in the
-native mode menu starts one day. Ordinary Electric selection is untimed.
+Vacation `days: 100` means Until changed. The HPS10 manual describes returning
+from Vacation with nine hours left for recovery, so days are not an exact return
+appointment.
 
-### Temperature and availability
+### Availability and energy
 
-Temperature controls are always enabled outside Vacation. The slider honors the
-heater's reported remote maximum, up to 150°F. If the heater reports 125°F as
-its maximum, the integration will not bypass it. The app's instructions use the
-physical controls to raise that allowance; doing so changes the actual setpoint.
-No measured tank temperature is available, so the setpoint is not presented as one.
+Availability uses your model's observed categories automatically: raw 5 is
+High/100% and raw 0 is Medium/50%. There is no calibration setting. These are
+category labels, not measured percentages of remaining gallons. Low's Bluetooth
+code is still unknown; unrecognized values display Unknown. Raw values remain
+in the entity attributes and diagnostics.
 
-In **Configure → Hot-water availability scale**, select **HPS10 observed
-categories** for the tested model. Raw 5 maps to High/100%; raw 0 maps to
-Medium/50%, matching nearby app and official-HA observations. These percentages
-are category labels, not measured remaining gallons. **Low's BLE code is still
-unknown**, and other codes remain unknown rather than becoming a false 0% or fault.
-Other models default to **Not calibrated**. The raw value remains in attributes.
+**Energy usage** reports cumulative kWh and can be added to the Energy dashboard.
+It does not import cloud history or provide instantaneous power measurements.
 
-## Install and connect
+### Errors, clock and utility tariffs
 
-Requires Home Assistant **2025.12 or later**, plus a Bluetooth adapter or an
-ESPHome Bluetooth proxy with active connections in range of the heater. Proxy
-transport uses HA's standard APIs but has not been hardware-tested here.
+**Error status** reports the heater's current fault, including unknown codes.
+Open the entity for the description and code. Fault **42: Clock not set** includes
+instructions to connect the heater to the Internet through the official iCOMM
+app, then reconnect BLE and check that the fault clears. A persistent clock fault
+needs the manufacturer's setup/troubleshooting procedure. This integration does
+not set the heater's clock, and an absent fault does not verify time or timezone.
 
-1. In **HACS → Custom repositories**, add
-   `https://github.com/spikked27/AOSmith-BLE` with category **Integration**.
-2. Download **AO Smith Local BLE** and restart Home Assistant.
-3. Enable Bluetooth on the heater. Close iCOMM and disconnect nRF Connect so they
-   release their connection. Do not reset the heater.
-4. Go to **Settings → Devices & services → Add integration → AO Smith Local BLE**.
-   Choose the discovered heater, scan again, or enter its Bluetooth address.
-5. Verify the suggested six-digit PIN. For a new installation, choose **Create a
-   new local pairing** and leave the identifier blank. Save the generated
-   identifier shown on the confirmation page before continuing.
-6. Confirm. Setup authenticates and reads the heater without changing its mode
-   or temperature. Open **Configure** and select the availability profile.
+Use iCOMM to configure utility plans and heater-owned schedules. **An offline
+heater cannot receive updated tariff data from the service.** Its stored schedule
+may continue, but this integration neither refreshes it nor verifies that its
+rates, holidays or seasonal rules remain current. Local control does not
+require cloud access; keeping a utility plan current may require reconnecting
+through the official app. We have not verified whether iCOMM refreshes existing
+plans automatically or requires reapplying them.
 
-For manual installation, extract the release ZIP's `custom_components/aosmith_ble`
-folder into `/config/custom_components/aosmith_ble`, then restart HA.
+## Configuration
 
-If enrollment times out, retry uses the same identifier instead of enrolling
-repeatedly. If you abandon setup, use **Reuse an existing local pairing** with
-that exact identifier. Existing pairings are never deleted. Normal HA backups
-preserve the integration's PIN and identifier.
+**Settings → Devices & services → AO Smith Local BLE → Configure** offers:
 
-### Updating an existing installation
+- **Polling interval:** 30 seconds by default; adjustable from 15 to 300 seconds.
+- **Hot Water Plus:** enable only if your heater offers this feature in iCOMM.
 
-Download the update in HACS and **restart Home Assistant**. Keep your existing
-integration and pairing; do not remove/re-add them.
+Temperature controls, energy readings and active countdown polling are automatic.
+No separate keepalive option is needed. The integration keeps its BLE connection
+and reconnects/authenticates when necessary. Behavior after a heater power loss
+or long radio idle period can depend on firmware.
 
-Version 1.0.0 removes obsolete options and disables retired tariff, demand-response,
-raw-fault, duplicate-temperature and countdown entities without deleting history.
-Old debug buttons are disabled once during migration; you can enable them again.
-The new Vacation control replaces the draft Mode duration entity. Update any
-automations targeting that draft entity; the `set_timed_mode` action is unchanged.
-Old speculative availability scales reset to Not calibrated: select **HPS10
-observed categories** on the tested model. Core entity identities are retained.
+## Updates and cleanup
 
-## Settings and connection behavior
+Update through HACS, then **restart Home Assistant**. Keep the existing integration
+and pairing; do not remove and re-add it for an update.
 
-Only three options remain: availability profile, polling interval (default 30
-seconds, range 15–300), and model-specific Hot Water Plus. Maximum temperature,
-energy, and active countdown reads are automatic. Unsupported optional registers
-do not make the core controls fail.
+Version 1.1.0 fixes the shrinking temperature ceiling, defaults availability to
+HPS10, and changes the Vacation control to Vacation/Guest mode. The update
+**automatically removes obsolete entity-registry entries** left by earlier
+versions: duplicate temperature/countdown sensors and old tariff, raw-fault and
+demand-response entities. No manual purge is needed. Recorder history is not
+purged. Remove any dashboard cards or automations you created for retired entities.
 
-The integration keeps a connection and polls, reconnecting and authenticating
-when necessary. No separate keepalive setting is needed. Read failures retry
-once; writes are never automatically replayed and require readback confirmation.
-After a lost write response, refresh before repeating a command: it may already
-have reached the heater. Radio behavior after long idle or a power interruption
-still depends on the heater's firmware.
+Three current debug buttons remain disabled by default: Refresh readings,
+Reconnect Bluetooth, and Inspect extended registers. These are optional tools,
+not abandoned entities. User-enabled debug buttons remain enabled on later updates.
 
-## Errors, clock and utility plans
+## Troubleshooting
 
-**Error status** reports the current fault, including unknown nonzero codes.
-Attributes include the code, description and `clock_not_set`. Connection failure
-makes readings unavailable; it does not report a false healthy state. This is
-one current fault, not an alarm history.
+- **Heater not found:** enable its Bluetooth, disconnect phone apps, and check
+  adapter/proxy range. A connected heater may stop advertising.
+- **Pairing failed:** verify PIN and identifier. Retry uses the same identifier
+  rather than repeatedly filling pairing slots.
+- **Unavailable:** check Bluetooth coverage. Connection failures make readings
+  unavailable; they do not report zero energy or a healthy heater.
+- **Command failed:** refresh before repeating it. A lost response can mean the
+  setting changed without confirmation. Writes are not automatically replayed.
 
-Clock setting, heater-owned schedules and tariff programming are not implemented.
-Use the official iCOMM app for utility setup. The integration does not clear or
-rewrite existing heater schedules. Fault 42 can identify an unset clock, but a
-clear fault cannot establish correct time or timezone. Offline TOU timing is not
-guaranteed. HA-owned automations use Home Assistant's clock and require HA/BLE
-availability when a command is due.
+For a report, enable **debug logging** on the integration entry, reproduce the
+problem, then disable logging to download the log and select **Download
+diagnostics**. Include model, firmware, adapter/proxy type, time and physical
+heater reading. Diagnostics omit pairing secrets; review full HA logs before
+sharing because other integrations may include private details.
 
-## Troubleshooting and development
+To use a debug button, open **Settings → Devices & services → Entities**, show
+disabled entities, filter by this integration, and enable the required button.
+Inspect extended registers is read-only. Diagnostic histories are bounded, kept
+in memory and cleared on reload. Nothing is uploaded automatically.
 
-1. On the integration entry, enable **debug logging** and reproduce the issue.
-2. Disable debug logging to download the log, then **Download diagnostics**.
-3. If needed, enable a debug button from **Settings → Devices & services →
-   Entities**, filtering by this integration and disabled entities. Available
-   buttons are **Refresh readings**, **Reconnect Bluetooth**, and read-only
-   **Inspect extended registers**. Disabled entities can be hidden by default.
-4. Include model/firmware, adapter/proxy type, approximate time, expected behavior
-   and the physical display reading when reporting an issue.
+## Development and support
 
-Diagnostics omit addresses, device names, PINs, pairing identifiers and handshake
-secrets. They retain the full availability word, optional-register results and
-bounded in-memory protocol/command histories. Review full HA logs before sharing;
-other components can include private data. Nothing is uploaded automatically.
+Report issues at [GitHub Issues](https://github.com/spikked27/AOSmith-BLE/issues).
+See [VALIDATION.md](VALIDATION.md) for hardware coverage and limitations,
+[FEATURES.md](FEATURES.md) for scope, and [PROTOCOL.md](PROTOCOL.md) /
+[RESEARCH.md](RESEARCH.md) for technical findings.
 
-Development uses Python 3.13 and HA 2025.12.5; see the test workflow for dependency
-installation. Run `ruff check .`, `ruff format --check .` and `pytest -q`.
-Restart HA after replacing Python files; entry Reload does not reliably reload code.
-
-See [VALIDATION.md](VALIDATION.md) for tested behavior and remaining hardware
-limits, [FEATURES.md](FEATURES.md) for scope, and [RESEARCH.md](RESEARCH.md) /
-[PROTOCOL.md](PROTOCOL.md) for protocol evidence. Users do not need the APK.
+Tests use Python 3.13, HA 2025.12.5 and a simulated BLE device. The GitHub workflow
+installs the required dependencies and runs Ruff, pytest and archive validation.
+After editing Python code locally, restart HA; an integration Reload is not a
+reliable code hot-reload.

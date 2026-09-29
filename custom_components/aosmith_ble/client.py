@@ -15,7 +15,7 @@ from .const import (
     AVAILABILITY,
     FAULT,
     HOT_WATER_PLUS,
-    MAX_SETPOINT,
+    MAX_TEMP_F,
     MIN_TEMP_F,
     MODE,
     NOTIFY_UUID,
@@ -33,7 +33,6 @@ from .protocol import (
     frame,
     read_frame,
     read_words,
-    temperature_limit,
     validate_identifier,
     write_frame,
 )
@@ -350,18 +349,8 @@ class HeaterClient:
                 if register == SETPOINT:
                     if (await self._read(MODE) & 0xFF) == 2:
                         raise ProtocolError("Leave Vacation mode before changing the temperature")
-                    try:
-                        maximum_raw = await self._read(MAX_SETPOINT)
-                    except StatusError as err:
-                        if err.code != 1:
-                            raise
-                        maximum_raw = None
-                    maximum = temperature_limit(maximum_raw, decode_temperature(current))
-                    if not MIN_TEMP_F <= decode_temperature(value) <= maximum:
-                        raise ProtocolError(
-                            f"Temperature exceeds the live permitted range ({MIN_TEMP_F}–{maximum} °F); "
-                            "refresh and check the heater's physical controls"
-                        )
+                    if not MIN_TEMP_F <= decode_temperature(value) <= MAX_TEMP_F:
+                        raise ProtocolError(f"Temperature must be within {MIN_TEMP_F}–{MAX_TEMP_F} °F")
                 if register == HOT_WATER_PLUS and (await self._read(MODE) & 0xFF) not in (1, 4, 5):
                     raise ProtocolError("Hot Water Plus requires Electric, Hybrid or Heat pump mode")
                 await asyncio.sleep(self._spacing)

@@ -89,10 +89,18 @@ FAULTS = {
 def fault_details(raw):
     """Keep unknown codes visible and retain the complete word for diagnostics."""
     code = raw & 0xFF
-    return {
+    details = {
         "fault_code": code,
         "description": FAULTS.get(code, f"Unknown heater fault ({code})"),
         "clock_not_set": code == 42,
         "raw_fault_register": raw,
         "raw_hex": f"{raw:04X}",
     }
+
+    if code == 42:
+        details["recommended_action"] = (
+            "Connect the heater to the Internet using the official iCOMM app to restore its clock. "
+            "Then reconnect Bluetooth and check that this error clears. "
+            "If it persists, follow the manufacturer's clock setup instructions."
+        )
+    return details

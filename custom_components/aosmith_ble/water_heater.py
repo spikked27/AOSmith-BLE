@@ -4,9 +4,9 @@ from homeassistant.components.water_heater import WaterHeaterEntity, WaterHeater
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DOMAIN, MAX_TEMP_F, MIN_TEMP_F, MODE, MODE_NAMES, MODES, SETPOINT
+from .const import DEFAULT_MODE_DAYS, DOMAIN, MAX_TEMP_F, MIN_TEMP_F, MODE, MODE_NAMES, MODES, SETPOINT
 from .entity import HeaterEntity
-from .protocol import encode_temperature, encode_timed_mode, temperature_limit
+from .protocol import encode_temperature, encode_timed_mode
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -45,9 +45,10 @@ class Heater(HeaterEntity, WaterHeaterEntity):
         if operation_mode not in MODES:
             raise HomeAssistantError("Unsupported mode")
         # Custom duration is available on the device page and through our action.
-        value = {"Vacation": encode_timed_mode("Vacation", 100), "Guest": encode_timed_mode("Guest", 1)}.get(
-            operation_mode, MODES[operation_mode]
-        )
+        value = {
+            "Vacation": encode_timed_mode("Vacation", DEFAULT_MODE_DAYS[2]),
+            "Guest": encode_timed_mode("Guest", DEFAULT_MODE_DAYS[3]),
+        }.get(operation_mode, MODES[operation_mode])
         await self.coordinator.async_set_value(MODE, value)
 
     async def async_set_temperature(self, **kwargs):
@@ -58,24 +59,13 @@ class Heater(HeaterEntity, WaterHeaterEntity):
         except (KeyError, TypeError, ValueError) as err:
             raise HomeAssistantError("Provide a valid temperature") from err
         if not MIN_TEMP_F <= temperature <= self.max_temp:
-            raise HomeAssistantError(
-                f"Choose a temperature from {MIN_TEMP_F} to {self.max_temp} °F. "
-                "To raise the heater's remote-control maximum, use its physical controls, then refresh."
-            )
+            raise HomeAssistantError(f"Choose a temperature from {MIN_TEMP_F} to {self.max_temp} °F.")
         await self.coordinator.async_set_value(SETPOINT, encode_temperature(temperature))
-
-    @property
-    def max_temp(self):
-        return temperature_limit(
-            self.coordinator.data.registers.get("maximum_setpoint"), self.target_temperature
-        )
 
     @property
     def extra_state_attributes(self):
         return {
-            "remote_temperature_maximum_f": self.max_temp,
-            "mode_duration_raw": self.coordinator.data.mode_days,
-            "vacation_selection": "On until changed",
-            "guest_selection": "1 day; use Set timed mode for another duration",
-            "vacation_control": "Choose days in Vacation to enter Vacation in one step",
+            "vacation_default_days": DEFAULT_MODE_DAYS[2],
+            "guest_default_days": DEFAULT_MODE_DAYS[3],
+            "duration_control": "Vacation/Guest mode",
         }
