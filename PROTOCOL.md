@@ -173,14 +173,18 @@ subsequent setpoint readback. Register 1:43 remains a read-only diagnostic candi
 no maximum-register override is written.
 
 
-## Observed HPS10 availability categories
+## HPS10 availability categories — corrected in 1.1.1
 
-The default HPS10 mapping uses raw 0 to Medium/50% and raw 5 to High/100%.
-Captured frames `DB02091B17000080CA` and `DB02091B17000580AC` validate decoding;
-the semantic association comes from nearby owner app/official-HA screenshots,
-not from an APK-defined BLE enum. All other values remain unknown. See
-RESEARCH.md for timestamps and model/firmware scope. Never treat every unknown
-code as Low, nor treat Low as a heater fault.
+The default mapping is raw 0 → Low/0%, 5 → Medium/50%, 10 → High/100%.
+Captured frames `DB02091B17000080CA`, `DB02091B17000580AC`, and
+`DB02091B17000A8006` validate the wire decoding. The last was observed twice in
+the September 28 23:52 EDT capture with successful polling and fault 0.
+
+The owner specified this corrected interpretation after raw 10 appeared. It
+supersedes the earlier mapping inferred from non-simultaneous BLE/app readings;
+it is not an APK-defined enum. Other values remain unknown. Low availability
+is not a heater fault or an empty-tank indication. Raw byte/full word remain in
+diagnostics; recorded history is not rewritten.
 
 
 ## Version 1.0.0 limits and Low availability

@@ -241,3 +241,18 @@ or programming flow. An offline heater cannot receive new tariff data from the
 service; the currentness of stored schedules, price data and holidays is not
 established. Clock fault 42 includes recommended Internet/iCOMM recovery steps,
 but clearing that fault is not proof of a current tariff or correct timezone.
+
+
+## 1.1.1 availability correction
+
+At September 28 23:52:41 and 23:52:52 EDT, version 1.1.0 received
+`DB02091B17000A8006`: raw availability 10, with valid checksum and fault 0.
+The owner then instructed the mapping 10=High/100%, 5=Medium/50%, 0=Low/0%.
+This replaces the earlier 0=Medium, 5=High hypothesis derived from observations
+at different times. The app/official-HA screenshots did not prove that hypothesis.
+
+The release implements the owner's specified mapping. The 0/5/10 wire readings
+are captured, while their categorical interpretation is not an independently
+confirmed APK enum. Unknown values remain unknown, and Low does not set Error
+status. Neither -5 nor 251 is assigned an availability category. Additional
+comparisons may refine the interpretation; the raw data is preserved.

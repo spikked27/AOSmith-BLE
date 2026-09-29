@@ -14,7 +14,7 @@ heat pumps, electric, gas, tankless and recirculation products with other maps.
 | Advanced load-up flag | Removed from product scope | No utility writes exposed |
 | Utility enrollment device flag | Removed from product scope | No account enrollment |
 | Remaining days | Vacation/Guest control reads active countdown; other timed modes available through action | Firmware-specific sentinels and expiry |
-| Hot-water availability | Default HPS10 observed categories: raw 0 → 50%, raw 5 → 100%; raw attribute retained | Low code, recovery confirmation and other models |
+| Hot-water availability | Default HPS10 observed categories: raw 0 → 0%, raw 5 → 50%, raw 10 → 100%; raw attribute retained | Further paired observations and other models |
 | Fault status | One Error status problem entity with readable current fault, including clock code 42 | Additional model/firmware validation |
 | Energy use and history | Local cumulative kWh sensor | Heating-cycle delta, reset behavior and other models |
 | Actual tank temperature / running components | No confirmed local mapping | Telemetry source and units |
@@ -32,7 +32,7 @@ heat pumps, electric, gas, tankless and recirculation products with other maps.
 2. Test one-day Vacation then return to the previous mode; compare countdown.
 3. Test Guest duration and restore. Test boost only on a model that offers it.
 4. During normal use/recovery, note any new availability code and matching app
-   category. High/Medium have an observed HPS10 mapping; Low is not yet identified.
+   category. The HPS10 mapping now includes Low/Medium/High; report any contradictions.
 
 A passing simulated peripheral test checks our encoding and recovery; it does
 not prove that an optional feature exists on a particular heater. Contributions

@@ -15,7 +15,7 @@ different protocols. This project is independent of A. O. Smith.
 |---|---|
 | Water heater | Sets temperature and selects Hybrid, Heat pump, Electric, Vacation or Guest |
 | Vacation/Guest mode | Adjusts the active Vacation or Guest countdown; shows Off in other modes |
-| Hot water availability | High = 100%, Medium = 50%, using the observed HPS10 mapping |
+| Hot water availability | High = 100%, Medium = 50%, Low = 0%, using the HPS10 mapping |
 | Energy usage | Cumulative electricity use in kWh; supports the HA Energy dashboard |
 | Error status | Indicates a reported heater fault and provides its description and code |
 
@@ -114,11 +114,20 @@ appointment.
 
 ### Availability and energy
 
-Availability uses your model's observed categories automatically: raw 5 is
-High/100% and raw 0 is Medium/50%. There is no calibration setting. These are
-category labels, not measured percentages of remaining gallons. Low's Bluetooth
-code is still unknown; unrecognized values display Unknown. Raw values remain
-in the entity attributes and diagnostics.
+Availability uses the HPS10 category mapping automatically:
+
+| Raw Bluetooth value | Category | Display |
+|---|---|---|
+| 10 | High | 100% |
+| 5 | Medium | 50% |
+| 0 | Low | 0% |
+
+There is no calibration setting. These percentages label categories, not measured
+remaining gallons. Low is an availability reading, not a heater fault; 0% does
+not mean the tank is empty. Other raw codes display Unknown. Raw values remain
+in the entity attributes and diagnostics. Version 1.1.1 corrects the earlier
+mapping; existing recorded history is not rewritten.
+
 
 **Energy usage** reports cumulative kWh and can be added to the Energy dashboard.
 It does not import cloud history or provide instantaneous power measurements.

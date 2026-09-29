@@ -1,3 +1,10 @@
+# 1.1.1 — September 29, 2026
+
+- Correct HPS10 hot-water availability to raw 10 = High/100%, 5 = Medium/50%,
+  and 0 = Low/0%, as specified by the owner after the new raw 10 capture.
+- Update category attributes, captured-frame regression tests and documentation.
+- Preserve unknown-code handling, raw diagnostics and existing entity identity.
+
 # 1.1.0 — September 29, 2026
 
 - Fix the shrinking temperature ceiling: use the documented 95–150°F HPS10 range,

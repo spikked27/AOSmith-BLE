@@ -108,7 +108,7 @@ def test_invalid_timed_modes(mode, days):
 
 
 @pytest.mark.parametrize(
-    "raw,expected", [(0, 50), (5, 100), (True, None), (-5, None), (251, None), (65531, None)]
+    "raw,expected", [(0, 0), (5, 50), (10, 100), (True, None), (-5, None), (251, None), (65531, None)]
 )
 def test_availability_defaults_to_observed_hps10_categories(raw, expected):
     from custom_components.aosmith_ble.protocol import decode_availability
@@ -126,8 +126,9 @@ def test_confirmed_grouped_energy_response():
 @pytest.mark.parametrize(
     "frame_hex,expected",
     [
-        ("DB02091B17000080CA", 50),
-        ("DB02091B17000580AC", 100),
+        ("DB02091B17000080CA", 0),
+        ("DB02091B17000580AC", 50),
+        ("DB02091B17000A8006", 100),
     ],
 )
 def test_observed_hps10_availability_frames(frame_hex, expected):
