@@ -10,6 +10,12 @@
   or Bluetooth backend exception text. Never automatically replay a write.
 - Confirm in APK bytecode that the discovered clock writer is called only for
   the older heatPump profile. No next-generation clock writer has been established.
+- Follow the reported remote temperature limit up to the model's documented
+  150°F ceiling; retain a 140°F fallback and keep maximum reads independent of
+  optional diagnostic settings. Explain physical-control maximum adjustment.
+- Separate clock requirements for basic control/countdowns versus heater-owned
+  schedules. Identify next-generation clock-unset fault 42 and document the
+  manual's nine-hour Vacation recovery behavior.
 - This is a development change, not a completed release or hardware-validation claim.
 
 # 0.3.1 — availability calibration and recovery fixes

@@ -223,6 +223,46 @@ async def test_default_temperature_controls_and_timed_selection(coordinator):
         await heater.async_set_temperature(temperature=126)
 
 
+@pytest.mark.parametrize("maximum", [125, 140, 150])
+async def test_temperature_limit_follows_device_up_to_documented_150(coordinator, maximum):
+    from custom_components.aosmith_ble.protocol import encode_temperature
+
+    heater = Heater(coordinator, SimpleNamespace(options={}))
+    coordinator.data = HeaterState(125, 4, 5, 0, registers={"maximum_setpoint": encode_temperature(maximum)})
+    assert heater.max_temp == maximum
+    await heater.async_set_temperature(temperature=maximum)
+    coordinator.async_set_value.assert_awaited_once_with(SETPOINT, encode_temperature(maximum))
+    with pytest.raises(HomeAssistantError):
+        await heater.async_set_temperature(temperature=maximum + 1)
+
+
+def test_unknown_maximum_does_not_raise_fallback_to_150(coordinator):
+    heater = Heater(coordinator, SimpleNamespace(options={}))
+    assert heater.max_temp == 140
+    coordinator.data = HeaterState(125, 4, 5, 0, registers={"maximum_setpoint": 0xFFFF})
+    assert heater.max_temp == 140
+
+
+async def test_maximum_is_read_even_when_diagnostics_are_disabled(tmp_path):
+    from unittest.mock import Mock
+
+    from custom_components.aosmith_ble.const import MAX_SETPOINT
+    from custom_components.aosmith_ble.coordinator import HeaterCoordinator
+
+    hass = HomeAssistant(str(tmp_path))
+    client = SimpleNamespace(optional_registers={})
+    entry = SimpleNamespace(
+        data={"address": "AA:BB:CC:DD:EE:FF"},
+        options={"extended_readings": False, "energy_readings": False},
+        pref_disable_polling=False,
+        async_on_unload=Mock(),
+    )
+    with patch("custom_components.aosmith_ble.coordinator.make_client", return_value=client):
+        HeaterCoordinator(hass, entry)
+    assert client.optional_registers == {"maximum_setpoint": MAX_SETPOINT}
+    await hass.async_stop()
+
+
 async def test_timed_mode_service_targets_only_selected_heater(tmp_path, coordinator):
     from custom_components.aosmith_ble.services import async_register_services
 

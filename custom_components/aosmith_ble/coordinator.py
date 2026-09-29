@@ -20,6 +20,7 @@ from .const import (
     ENERGY,
     HOT_WATER_PLUS,
     INSPECT_REGISTERS,
+    MAX_SETPOINT,
     NAME,
     OPTIONAL_REGISTERS,
 )
@@ -57,6 +58,8 @@ class HeaterCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, entry):
         self.client = make_client(hass, entry.data)
         self.options = dict(entry.options)
+        # This governs the temperature control, regardless of diagnostic options.
+        self.client.optional_registers["maximum_setpoint"] = MAX_SETPOINT
         if entry.options.get("energy_readings", True):
             self.client.optional_registers["energy_wh"] = ENERGY
         if entry.options.get("extended_readings", True):

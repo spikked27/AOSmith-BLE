@@ -38,9 +38,10 @@ pump models use different registers and are not supported by this release.
 - **Mode duration** on the device page, plus the **Set timed mode** action: Electric 1–99 days, Vacation 1–99 days or
   100 for continuously on, and Guest 1–7 days. These duration controls are
   APK-derived and awaiting hardware validation.
-- Temperature controls default on for new setups (95–140°F), with register
-  readback. An existing explicit off preference is preserved. A readable device
-  maximum can reduce the UI limit; it never raises the 140°F ceiling.
+- Temperature controls default on for new setups, with register readback. The
+  slider follows the heater-reported remote maximum, up to the HPS10 manual
+  ceiling of 150°F. Missing/invalid maximum data retains the 140°F fallback.
+  An existing explicit off preference is preserved.
 - Cumulative **Energy usage** in kWh, suitable for HA energy statistics. The observed
   350.532 kWh agrees with the owner’s approximately 350 kWh app reading.
 - Percentage availability with explicitly selected scale and fault-present status.
@@ -88,7 +89,8 @@ retrieval timestamp even without Internet/Bluetooth. Failed or cancelled lookups
 preserve the previous plan. There is no automatic online refresh, login or account
 configuration. Use the lookup flow again to explicitly replace an outdated plan.
 
-Read [TARIFF.md](TARIFF.md) for clock, daylight-saving and schedule validation.
+Read [RESEARCH.md](RESEARCH.md) for the temperature-limit, clock and official-integration
+comparison, and [TARIFF.md](TARIFF.md) for schedule validation.
 This version cannot yet make the heater follow the selected plan. Current mode
 and temperature controls continue to work locally.
 
@@ -117,7 +119,9 @@ BLE: Set timed mode**, select your integration entry, mode and days. This action
 also remains available in automations. Vacation 100 means **Until changed**, not
 100 days. For ordinary seven-day Vacation, enter 7.
 
-The device owns its countdown; HA does not emulate it. Changing back to Hybrid
+The device owns its countdown; HA does not emulate it. The HPS10 manual specifies
+that Vacation returns to the previous mode with nine hours remaining for recovery,
+so its end should not be treated as exactly days × 24 hours. Changing back to Hybrid
 or Heat pump exits a timed mode. Native Electric selection retains the previously
 verified zero-duration encoding. Finite countdowns and their expiry behavior
 still need physical confirmation; passing software tests alone is insufficient.
@@ -200,6 +204,14 @@ The water-heater temperature editor is enabled by default. If it was previously
 disabled, enable **Configure → Enable temperature controls**. This is the native water-heater UI; a separate
 climate/thermostat entity is not required. The **Temperature setpoint** sensor
 shows the setting even while writes are disabled. It is not tank temperature.
+The app and official HA integration both use the heater's reported remote maximum.
+If HA shows a 125°F maximum, that is distinct from the product's 150°F capability.
+The app's help directs users to increase the temperature using the physical
+heater controls to raise the permitted remote maximum, then refresh. This changes
+the actual setpoint; it is not merely a slider preference. No maximum-register
+write or automatic temperature increase is performed by this integration.
+The maximum is polled even with extended diagnostics disabled.
+
 Vacation mode hides the temperature editor; both UI and transport require leaving
 Vacation before changing setpoint. Mode selection remains available.
 

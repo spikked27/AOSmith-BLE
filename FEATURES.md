@@ -19,7 +19,7 @@ heat pumps, electric, gas, tankless and recirculation products with other maps.
 | Energy use and history | Local cumulative kWh sensor | Heating-cycle delta, reset behavior and other models |
 | Actual tank temperature / running components | No confirmed local mapping | Telemetry source and units |
 | Utility tariff lookup | Anonymous lookup and cached seasonal/holiday preview | Optional remote API may change; no heater programming yet |
-| Device clock and timezone | No verified next-generation writer; discovered app path is older-profile only | Next-generation clock source/protocol, then readback/DST/power recovery |
+| Device clock and timezone | Not needed for basic controls/countdown commands; next-gen clock fault 42 identified | Needed to validate heater-owned offline TOU; no verified next-gen writer |
 | On-heater schedules and holidays | Located, not enabled | Complete round-trip/backup/restore before writes |
 | Cloud notifications and energy graphs | Use HA automations/history once data exists | No cloud history imported |
 | Wi-Fi setup, account sharing and utility signup | Outside local heater-control scope | Require separate network/account workflows |

@@ -71,8 +71,9 @@ readback; the older layout must not be copied blindly.
    should remain unchanged by tariff selection.
 
 No intentional power interruption is needed for these first checks. Schedule
-programming, clock synchronization, price-based control and cost calculation
-remain unimplemented until the relevant evidence is available. Demand-response
+programming and clock synchronization remain unimplemented pending relevant
+protocol evidence. HA-owned price calculations or automations can instead use
+HA time and do not depend on setting the heater clock. Demand-response
 enrollment/control remains out of scope.
 
 
@@ -91,7 +92,7 @@ The saved PSEG 195 cache and the grouped 350.532 kWh read were present and valid
 The iCOMM 14.1.0 bytecode confirms the family guard, rather than merely showing
 an older constant table. Connect generator #13456 at offsets 0x8E–0xAA compares
 the current profile with `heatPump` and skips `setEssentialParams` when it differs.
-Generator #13493 calls `setClock`; function #14616 builds the block-26 write.
+Generator #13493 calls `setClock`; function #14611 builds the block-26 write.
 The next-generation profile does not take that path. This does not prove there
 is no local clock command; it means this APK path is not evidence for one.
 
@@ -109,3 +110,26 @@ HA-owned automations can use HA's timezone and issue supported BLE mode/setpoint
 commands at specified times. That avoids an on-heater wall-clock dependency, but
 requires HA and Bluetooth to be available and is not on-heater TOU programming.
 No such automatic control is enabled by selecting a tariff.
+
+
+## Clock requirement is feature-specific
+
+Clock synchronization is **not a prerequisite for the existing local controls**.
+Setpoint/mode writes, readings and native duration commands contain no date or
+UTC offset. The HPS10 owner's manual defines Vacation as a countdown and notes
+that the previous mode resumes with nine hours remaining. There is no reason to
+replace that countdown with an HA wall-clock timer.
+
+The next-generation APK fault catalog (module 1489) includes code 42 for an unset
+real-time clock. This establishes a clock-validity condition, but not its setting
+command. A zero current fault register is not a positive clock/date readback.
+
+Heater-owned seasons, weekday rules and holiday schedules need correct local
+date/time, so offline TOU remains dependent on establishing that behavior. The
+BLE TOU upload generator #13465 sends holidays/preferences and seasons without
+an explicit clock update. No next-generation sync call or timezone payload was
+found in that path. The official HA integration and py-aosmith do not synchronize
+clocks either; they operate through the cloud. That is not evidence that a
+never-online heater will maintain correct time after power loss or through DST.
+
+Full source references and the temperature-limit findings are in RESEARCH.md.

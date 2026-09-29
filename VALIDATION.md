@@ -3,7 +3,7 @@
 September 29, 2026. Python 3.13.15 and Home Assistant 2025.12.5 with its
 Bluetooth/USB dependencies. Ruff lint and formatting checks pass.
 
-104 automated tests cover captured read packets, exact APK CRC, temperature and
+109 automated tests cover captured read packets, exact APK CRC, temperature and
 timed-mode encoding, synthetic HMAC, framing, authentication/recovery, serialized
 requests, write/readback and uncertain writes without replay. New coverage checks
 optional-register rejection, timeout/backoff without losing core readings, manual
@@ -63,8 +63,15 @@ previous mode. Compare the heater/app countdown with HA and download diagnostics
 once afterward. Command outcomes now survive polling. Do not repeat clock reads
 that already returned zero four times.
 
-A complete app-equivalent release remains blocked by the next-generation clock
-mapping, on-heater schedule serialization/verification, and availability category
-mapping. Native finite-day countdown expiry, loss-of-power behavior, optional
+A core-control release does not require clock synchronization. Full on-heater
+offline scheduling remains blocked by clock behavior and schedule serialization/
+verification; availability category mapping also remains unresolved. Native finite-day countdown expiry, loss-of-power behavior, optional
 boost and additional models are also not established. No release/tag was made
 for these development changes; the main branch remains the published 0.3.1.
+
+
+Temperature research adds tested UI bounds at reported 125, 140 and 150°F,
+unknown/invalid maximum fallback, and maximum-register polling independent of
+diagnostic options. These tests do not raise the physical heater's temperature.
+The hard ceiling is now 150°F, supported by the model manual, while a lower
+reported remote limit is still honored. All 109 local tests and Ruff checks pass.

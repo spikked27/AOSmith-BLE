@@ -4,7 +4,7 @@ from homeassistant.components.water_heater import WaterHeaterEntity, WaterHeater
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DOMAIN, MAX_TEMP_F, MIN_TEMP_F, MODE, MODE_NAMES, MODES, SETPOINT
+from .const import DEFAULT_MAX_TEMP_F, DOMAIN, MAX_TEMP_F, MIN_TEMP_F, MODE, MODE_NAMES, MODES, SETPOINT
 from .entity import HeaterEntity
 from .protocol import encode_temperature, encode_timed_mode
 
@@ -62,7 +62,10 @@ class Heater(HeaterEntity, WaterHeaterEntity):
         except (KeyError, TypeError, ValueError) as err:
             raise HomeAssistantError("Provide a valid temperature") from err
         if not MIN_TEMP_F <= temperature <= self.max_temp:
-            raise HomeAssistantError(f"Choose a temperature from {MIN_TEMP_F} to {self.max_temp} °F")
+            raise HomeAssistantError(
+                f"Choose a temperature from {MIN_TEMP_F} to {self.max_temp} °F. "
+                "To raise the heater's remote-control maximum, use its physical controls, then refresh."
+            )
         await self.coordinator.async_set_value(SETPOINT, encode_temperature(temperature))
 
     @property
@@ -74,11 +77,12 @@ class Heater(HeaterEntity, WaterHeaterEntity):
             maximum = decode_temperature(raw)
             if MIN_TEMP_F <= maximum <= 180:
                 return min(MAX_TEMP_F, maximum)
-        return MAX_TEMP_F
+        return DEFAULT_MAX_TEMP_F
 
     @property
     def extra_state_attributes(self):
         return {
+            "remote_temperature_maximum_f": self.max_temp,
             "mode_duration_raw": self.coordinator.data.mode_days,
             "vacation_selection": "On until changed",
             "guest_selection": "1 day; use Mode duration to change it",

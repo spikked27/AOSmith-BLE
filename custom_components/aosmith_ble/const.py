@@ -15,9 +15,10 @@ SETPOINT = (11, 0)
 MODE = (11, 15)
 AVAILABILITY = (27, 23)
 FAULT = (2, 7)
-# Conservative initial UI range; do not silently expand the device limit.
+# HPS10 manual permits 150 F; remote control still honors the reported maximum.
 MIN_TEMP_F = 95
-MAX_TEMP_F = 140
+MAX_TEMP_F = 150
+DEFAULT_MAX_TEMP_F = 140
 
 VERSION = "0.3.2.dev0"
 AVAILABILITY_SCALES = {

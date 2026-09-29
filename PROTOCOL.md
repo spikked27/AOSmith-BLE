@@ -148,7 +148,7 @@ hardware. No unconfirmed write is replayed. Normal polling reads the active
 countdown even when optional diagnostic reads are disabled.
 
 The app connection generator #13456 checks `heatPump` before calling
-`setEssentialParams` (#13493), which invokes `setClock` (#14616). Bytecode offsets
+`setEssentialParams` (#13493), which invokes `setClock` (#14611). Bytecode offsets
 0x8E–0xAA establish that profile guard. Consequently, the block-26 clock writer
 is not established for the next-generation heater. Four zero captures do not
 resolve it. See TARIFF.md; do not reuse the older writer as a generic clock action.
