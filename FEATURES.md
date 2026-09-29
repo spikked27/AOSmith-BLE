@@ -8,7 +8,7 @@ heat pumps, electric, gas, tankless and recirculation products with other maps.
 |---|---|---|
 | Local pairing and reconnect | Implemented; hardware tested | Additional models, proxy and pairing-slot tests |
 | Temperature and Electric/Hybrid/Heat Pump | Implemented; hardware tested | Wider model coverage |
-| Vacation/Guest/timed Electric | Implemented; APK-derived | Physical display and remaining-days checks |
+| Vacation/Guest/timed Electric | Device-page Mode duration and automation action; APK-derived | Physical display and remaining-days checks |
 | Hot Water Plus 0–3 | Implemented, opt-in BEST profile feature | Supported heater and mode interaction check |
 | Utility demand-response pause | Removed from product scope | Raw read-only research capture remains |
 | Advanced load-up flag | Removed from product scope | Separate from future tariff preheating |
@@ -19,6 +19,7 @@ heat pumps, electric, gas, tankless and recirculation products with other maps.
 | Energy use and history | Local cumulative kWh sensor | Heating-cycle delta, reset behavior and other models |
 | Actual tank temperature / running components | No confirmed local mapping | Telemetry source and units |
 | Utility tariff lookup | Anonymous lookup and cached seasonal/holiday preview | Optional remote API may change; no heater programming yet |
+| Device clock and timezone | No verified next-generation writer; discovered app path is older-profile only | Next-generation clock source/protocol, then readback/DST/power recovery |
 | On-heater schedules and holidays | Located, not enabled | Complete round-trip/backup/restore before writes |
 | Cloud notifications and energy graphs | Use HA automations/history once data exists | No cloud history imported |
 | Wi-Fi setup, account sharing and utility signup | Outside local heater-control scope | Require separate network/account workflows |
@@ -26,8 +27,8 @@ heat pumps, electric, gas, tankless and recirculation products with other maps.
 
 ## Next evidence to collect
 
-1. Confirm the energy entity tracks the app across a heating cycle. Inspect twice
-   at least two minutes apart for timestamped candidate clock values.
+1. Confirm the energy entity tracks the app across a heating cycle. Repeated zero
+   clock captures have already been collected; repeating those is not a next step.
 2. Test one-day Vacation then return to the previous mode; compare countdown.
 3. Test Guest duration and restore. Test boost only on a model that offers it.
 4. Capture/compare an existing time-of-use plan before any schedule programming.

@@ -1,3 +1,17 @@
+# Unreleased — 0.3.2.dev0
+
+- Add device-page Mode duration for Vacation, Guest and Electric, with explicit
+  Until changed options and mode-specific limits. Display the active countdown.
+- Keep active countdown reads when optional diagnostics are disabled.
+- Reject duration changes when the live mode differs from the UI snapshot.
+- Verify duration through the dedicated remaining-days register if a mode read
+  returns only its code; a matching mode alone does not confirm duration.
+- Keep 20 command outcomes separately from routine traffic, without credentials
+  or Bluetooth backend exception text. Never automatically replay a write.
+- Confirm in APK bytecode that the discovered clock writer is called only for
+  the older heatPump profile. No next-generation clock writer has been established.
+- This is a development change, not a completed release or hardware-validation claim.
+
 # 0.3.1 — availability calibration and recovery fixes
 
 - Replace the unlabeled raw availability display with a percentage entity and

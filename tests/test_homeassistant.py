@@ -288,10 +288,11 @@ async def test_optional_platforms_respect_model_options(tmp_path, coordinator):
     entities = []
     entry = SimpleNamespace(entry_id="test", options={})
     await select.async_setup_entry(hass, entry, entities.extend)
-    assert entities == []
+    assert len(entities) == 1 and entities[0].name == "Mode duration"
+    entities.clear()
     entry.options = {"enable_hot_water_plus": True}
     await select.async_setup_entry(hass, entry, entities.extend)
-    assert len(entities) == 1
+    assert len(entities) == 2
     assert "switch" not in PLATFORMS and set(FLAGS) == {"fault_present"}
     await hass.async_stop()
 
@@ -400,3 +401,47 @@ async def test_vacation_hides_temperature_editor_and_rejects_temperature_writes(
     for invalid in (None, "invalid", float("nan")):
         with pytest.raises(HomeAssistantError):
             await heater.async_set_temperature(temperature=invalid)
+
+
+@pytest.mark.parametrize(
+    "mode,key,days,option,encoded",
+    [
+        (2, "vacation_days", 100, "Until changed", 0x6402),
+        (2, "vacation_days", 7, "7 days", 0x0702),
+        (2, "vacation_days", 99, "99 days", 0x6302),
+        (3, "guest_days", 1, "1 day", 0x0103),
+        (3, "guest_days", 7, "7 days", 0x0703),
+        (1, "electric_days", 0, "Until changed", 1),
+        (1, "electric_days", 99, "99 days", 0x6301),
+    ],
+)
+async def test_duration_device_control_reads_and_writes_active_mode(
+    coordinator, mode, key, days, option, encoded
+):
+    from custom_components.aosmith_ble.select import ModeDuration
+
+    coordinator.data = HeaterState(125, mode, 5, 0, registers={key: days})
+    control = ModeDuration(coordinator)
+    assert control.available
+    assert control.current_option == option
+    await control.async_select_option(option)
+    coordinator.async_set_value.assert_awaited_once_with(MODE, encoded, expected_mode=mode)
+
+
+async def test_duration_control_rejects_invalid_or_stale_values(coordinator):
+    from custom_components.aosmith_ble.select import ModeDuration
+
+    control = ModeDuration(coordinator)
+    assert not control.available and control.current_option is None
+    with pytest.raises(HomeAssistantError):
+        await control.async_select_option("7 days")
+    coordinator.data = HeaterState(125, 3, 5, 0, registers={"vacation_days": 100})
+    assert control.available and control.current_option is None
+    for option in ("8 days", "Until changed", "0 days", "7", None):
+        with pytest.raises(HomeAssistantError):
+            await control.async_select_option(option)
+    coordinator.async_set_value.assert_not_awaited()
+    coordinator.data = HeaterState(125, 2, 5, 0, registers={"vacation_days": 0xFFFF})
+    assert control.current_option is None
+    coordinator.last_update_success = False
+    assert not control.available

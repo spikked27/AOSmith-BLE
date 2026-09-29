@@ -46,7 +46,7 @@ class Heater(HeaterEntity, WaterHeaterEntity):
     async def async_set_operation_mode(self, operation_mode):
         if operation_mode not in MODES:
             raise HomeAssistantError("Unsupported mode")
-        # A normal mode selection has an explicit duration; custom duration uses our action.
+        # Custom duration is available on the device page and through our action.
         value = {"Vacation": encode_timed_mode("Vacation", 100), "Guest": encode_timed_mode("Guest", 1)}.get(
             operation_mode, MODES[operation_mode]
         )
@@ -81,5 +81,6 @@ class Heater(HeaterEntity, WaterHeaterEntity):
         return {
             "mode_duration_raw": self.coordinator.data.mode_days,
             "vacation_selection": "On until changed",
-            "guest_selection": "1 day; use set_timed_mode for another duration",
+            "guest_selection": "1 day; use Mode duration to change it",
+            "duration_control": "Mode duration; available in Vacation, Guest and Electric",
         }

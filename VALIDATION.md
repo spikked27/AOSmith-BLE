@@ -1,9 +1,9 @@
-# Validation of development preview 0.3.1
+# Validation of unreleased development 0.3.2.dev0
 
 September 29, 2026. Python 3.13.15 and Home Assistant 2025.12.5 with its
 Bluetooth/USB dependencies. Ruff lint and formatting checks pass.
 
-88 automated tests cover captured read packets, exact APK CRC, temperature and
+104 automated tests cover captured read packets, exact APK CRC, temperature and
 timed-mode encoding, synthetic HMAC, framing, authentication/recovery, serialized
 requests, write/readback and uncertain writes without replay. New coverage checks
 optional-register rejection, timeout/backoff without losing core readings, manual
@@ -16,6 +16,13 @@ isolation, offline preview, and scoped retirement of legacy utility entities. Ve
 availability-scale boundaries, raw-value retention, the captured grouped-energy
 reply, offline recovery-button use, obsolete notification rejection and live
 Vacation-mode temperature-write prevention.
+
+The unreleased change adds device-page duration boundaries/sentinels, stale
+mode rejection before writes, separate mode/countdown confirmation, active
+countdown polling without diagnostic reads, persistent-in-session command
+outcomes, and backend-error redaction. The test peripheral exercises both
+full-word and split mode/countdown readback. Neither simulation constitutes a
+physical duration test.
 
 One upstream aiohttp/Home Assistant deprecation warning remains during import.
 The tests do not connect to physical BLE hardware.
@@ -45,3 +52,19 @@ on-heater schedule programming remain unimplemented pending validation.
 Discovery retest, additional adapters/proxies/models, multi-slot pairing, long
 radio idle or heater power interruption, and internet-blocked endurance remain
 open. Passing these tests is not a claim of universal iCOMM compatibility.
+
+
+## Release acceptance still outstanding
+
+The duration UI is software tested but not yet installed or tested on the owner's
+heater. One consolidated hardware pass should check Vacation 7 days → Until
+changed → previous mode, Guest 2 days → previous mode, and Electric 2 days →
+previous mode. Compare the heater/app countdown with HA and download diagnostics
+once afterward. Command outcomes now survive polling. Do not repeat clock reads
+that already returned zero four times.
+
+A complete app-equivalent release remains blocked by the next-generation clock
+mapping, on-heater schedule serialization/verification, and availability category
+mapping. Native finite-day countdown expiry, loss-of-power behavior, optional
+boost and additional models are also not established. No release/tag was made
+for these development changes; the main branch remains the published 0.3.1.

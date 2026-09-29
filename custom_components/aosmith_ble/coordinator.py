@@ -81,10 +81,10 @@ class HeaterCoordinator(DataUpdateCoordinator):
             except (BleakError, TimeoutError, ProtocolError) as err:
                 raise UpdateFailed(str(err)) from err
 
-    async def async_set_value(self, register, value):
+    async def async_set_value(self, register, value, *, expected_mode=None):
         async with self.command_lock:
             try:
-                state = await self.client.set_value(register, value)
+                state = await self.client.set_value(register, value, expected_mode=expected_mode)
             except (BleakError, TimeoutError, ProtocolError) as err:
                 self.async_set_update_error(UpdateFailed(str(err)))
                 raise HomeAssistantError(str(err)) from err

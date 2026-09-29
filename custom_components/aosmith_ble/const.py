@@ -19,7 +19,7 @@ FAULT = (2, 7)
 MIN_TEMP_F = 95
 MAX_TEMP_F = 140
 
-VERSION = "0.3.1"
+VERSION = "0.3.2.dev0"
 AVAILABILITY_SCALES = {
     "unverified": "Not calibrated",
     "five_levels": "0–5 levels (estimated 20% steps)",
@@ -32,6 +32,11 @@ REMOTE_SETPOINT = (11, 6)
 VACATION_DAYS = (11, 17)
 GUEST_DAYS = (11, 18)
 ELECTRIC_DAYS = (11, 19)
+TIMED_MODE_REGISTERS = {
+    1: ("electric_days", ELECTRIC_DAYS),
+    2: ("vacation_days", VACATION_DAYS),
+    3: ("guest_days", GUEST_DAYS),
+}
 HOT_WATER_PLUS = (11, 20)
 UTILITY_OVERRIDE = (27, 3)
 CTA_PRESENT = (27, 25)

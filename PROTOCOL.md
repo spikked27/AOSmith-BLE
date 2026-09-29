@@ -134,3 +134,21 @@ DB020D1B0700000005594480F0 for the 48-bit energy counter. A credential-free
 fixture verifies this exact grouped response. Candidate clock words 26:3 and
 26:4 both remain zero at two captures about four minutes apart. A successful
 read ACK alone does not confirm register meaning or support for clock writes.
+
+
+## Unreleased duration verification and clock call path
+
+The device-page duration selector targets only the currently active timed mode.
+The transport rereads 11:15 inside its lock before writing. A differing mode
+aborts without mutation. Exact command-word readback still confirms a write;
+when 11:15 returns only the requested low-byte mode, its corresponding
+remaining-days status (11:17/18/19) must also equal the requested duration.
+This second confirmation path is simulated, not yet observed on the owner's
+hardware. No unconfirmed write is replayed. Normal polling reads the active
+countdown even when optional diagnostic reads are disabled.
+
+The app connection generator #13456 checks `heatPump` before calling
+`setEssentialParams` (#13493), which invokes `setClock` (#14616). Bytecode offsets
+0x8E–0xAA establish that profile guard. Consequently, the block-26 clock writer
+is not established for the next-generation heater. Four zero captures do not
+resolve it. See TARIFF.md; do not reuse the older writer as a generic clock action.

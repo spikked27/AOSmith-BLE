@@ -1,4 +1,4 @@
-# AO Smith Local BLE — experimental 0.3.1
+# AO Smith Local BLE — development 0.3.2.dev0
 
 Local Bluetooth integration for Home Assistant. No AO Smith account, password,
 or Internet is needed for heater control. Optional tariff lookup contacts AO Smith’s
@@ -35,7 +35,7 @@ pump models use different registers and are not supported by this release.
 - 30-second polling (configurable 15–300 seconds).
 - Water heater entity with Electric, Hybrid, Heat Pump, Vacation and Guest modes.
   Vacation selection means **on until changed**; Guest selection means **one day**.
-- Explicit **Set timed mode** action: Electric 1–99 days, Vacation 1–99 days or
+- **Mode duration** on the device page, plus the **Set timed mode** action: Electric 1–99 days, Vacation 1–99 days or
   100 for continuously on, and Guest 1–7 days. These duration controls are
   APK-derived and awaiting hardware validation.
 - Temperature controls default on for new setups (95–140°F), with register
@@ -55,7 +55,7 @@ pump models use different registers and are not supported by this release.
   Removing controls does not reset any previously changed heater flags.
 - Refresh, Reconnect and **Inspect extended registers** diagnostic buttons.
 - Redacted downloadable diagnostics, a timestamped extended-register capture,
-  and the last 60 protocol events.
+  the last 60 protocol events, and 20 command outcomes kept separately from polls.
 - Existing device pairings are never deleted. Routine reconnects never enroll keys.
 
 Actual tank temperature, compressor state, fault descriptions, clock synchronization,
@@ -64,10 +64,14 @@ as measured tank temperature. Availability value 5 was observed. A five-level pe
 explicit option; it is not assumed for every heater. See calibration below. See
 [FEATURES.md](FEATURES.md) for the full app-feature inventory and evidence gaps.
 
-## Update to 0.3.1
+## Development status
 
-Redownload the main branch in HACS and restart Home Assistant. Keep your existing
-entry and pairing. Confirm version **0.3.1** in diagnostics.
+This branch contains unreleased duration controls. It is not a completed feature
+release and does not add clock synchronization or heater-owned tariff scheduling.
+The published main branch remains 0.3.1. Keep your existing pairing and configuration.
+See [VALIDATION.md](VALIDATION.md) for software tests versus physical acceptance.
+
+## Configuration
 
 **Settings → Devices & services → AO Smith Local BLE → Configure** now offers:
 
@@ -93,11 +97,30 @@ core readings, and transport errors back off for ten minutes. **Inspect extended
 registers** retries known registers. Enable Hot Water Plus only on models that
 actually offer it in iCOMM; the live mode is checked before each boost write.
 
-For custom duration, open **Developer tools → Actions → AO Smith Local BLE: Set
- timed mode**, select your integration entry, mode and days. The same action is
-available in automations. The device owns its countdown; HA does not emulate it.
-Changing back to Hybrid or Heat Pump exits a timed mode. Native Electric selection
-retains the previously verified zero-duration encoding.
+### Setting Vacation, Guest or Electric duration
+
+On this development branch, open the heater's device page:
+
+1. Select **Vacation**, **Guest**, or **Electric** on the water-heater entity.
+2. Use **Mode duration** in Controls to choose the number of days.
+3. Read back the displayed countdown. Selecting another duration starts it from now.
+
+Vacation offers 1–99 days or **Until changed**. Guest offers 1–7 days. Electric
+offers 1–99 days or **Until changed**. The duration control is unavailable in
+Hybrid/Heat pump. A live mode check prevents a stale UI from re-entering a mode
+that somebody has since changed at the heater. Countdown polling remains enabled
+for the active mode even with extended diagnostic reads switched off. An absent
+or invalid countdown is unknown, not a remembered successful command.
+
+In the currently published 0.3.1, use **Developer tools → Actions → AO Smith Local
+BLE: Set timed mode**, select your integration entry, mode and days. This action
+also remains available in automations. Vacation 100 means **Until changed**, not
+100 days. For ordinary seven-day Vacation, enter 7.
+
+The device owns its countdown; HA does not emulate it. Changing back to Hybrid
+or Heat pump exits a timed mode. Native Electric selection retains the previously
+verified zero-duration encoding. Finite countdowns and their expiry behavior
+still need physical confirmation; passing software tests alone is insufficient.
 
 ```yaml
 action: aosmith_ble.set_timed_mode
@@ -196,8 +219,10 @@ heater. Late notifications from closed sessions are discarded.
 
 No proprietary phone APK is required for users to install this integration.
 Debug frames are limited to ordinary register traffic, and sensitive handshake
-events are represented only by opcode/status. The bounded event history is
-in memory and clears on reload/restart. There is no telemetry upload.
+events are represented only by opcode/status. The bounded event and command histories are
+in memory and clear on reload/restart. Command outcomes distinguish not sent,
+unconfirmed and confirmed by readback. A confirmed setting followed by a failed
+refresh retains its confirmation in diagnostics; do not repeat the write blindly. There is no telemetry upload.
 
 When replacing Python files during development, restart HA to guarantee new code
 is imported. A configuration-entry Reload can reconnect an existing loaded

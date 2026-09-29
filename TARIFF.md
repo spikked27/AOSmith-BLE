@@ -22,7 +22,8 @@ The cache is a preview, not a live price sensor or billing calculation.
 
 ## How offline time will work
 
-The intended design is for Home Assistant to supply local date/time over BLE.
+The proposed design is for Home Assistant to supply local date/time over BLE,
+but this requires a next-generation writer that has not yet been identified.
 HA uses its configured IANA timezone (for example America/New_York) to handle
 daylight-saving rules. The heater need not contact an Internet time server.
 HA still needs an accurate system clock, supplied by its host/RTC or time service.
@@ -62,9 +63,9 @@ readback; the older layout must not be copied blindly.
 ## Next physical checks
 
 1. Confirm the new Energy usage value against iCOMM; repeat after a heating cycle.
-2. Press Inspect extended registers, download diagnostics, wait at least two
-   minutes, and repeat. Note the heater's displayed time/date if it exposes them.
-   Host UTC and configured timezone are recorded; candidate clock words are raw.
+2. No more identical clock-candidate captures are requested. Four captures over
+   approximately 24 minutes already returned zero. First identify a supported
+   next-generation clock source or obtain a successful reference transaction.
 3. Confirm selecting a tariff displays the expected utility and tariff with ten
    events/ten holidays for the observed PSEG 195 response. Heater mode/setpoint
    should remain unchanged by tariff selection.
@@ -83,3 +84,28 @@ these could be unset values or an inapplicable register map. Clock writes remain
 unimplemented; repeated reads of the same two zero words are not a validation
 plan. The next step is to identify the next-generation clock source and format.
 The saved PSEG 195 cache and the grouped 350.532 kWh read were present and valid.
+
+
+## Clock call-path finding — September 29, 2026
+
+The iCOMM 14.1.0 bytecode confirms the family guard, rather than merely showing
+an older constant table. Connect generator #13456 at offsets 0x8E–0xAA compares
+the current profile with `heatPump` and skips `setEssentialParams` when it differs.
+Generator #13493 calls `setClock`; function #14616 builds the block-26 write.
+The next-generation profile does not take that path. This does not prove there
+is no local clock command; it means this APK path is not evidence for one.
+
+The September 29 01:24 and 01:27 UTC captures again contained two zero words.
+They add no clock mapping. The heater's actual time source, timezone handling,
+DST behavior and retention after power loss remain unknown. HA's configured
+clock in diagnostics does not mean that clock was sent to the heater.
+
+Vacation duration is a different operation: an app-defined number of days in a
+mode command, with separate countdown status. The integration sends that native
+command; it does not calculate an expiry date from an assumed heater wall clock.
+Whether the countdown survives heater power loss still requires hardware evidence.
+
+HA-owned automations can use HA's timezone and issue supported BLE mode/setpoint
+commands at specified times. That avoids an on-heater wall-clock dependency, but
+requires HA and Bluetooth to be available and is not on-heater TOU programming.
+No such automatic control is enabled by selecting a tariff.
