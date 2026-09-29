@@ -363,34 +363,23 @@ async def test_temperature_write_rechecks_live_vacation_mode(client, peripheral)
     assert not any(p[1] == 0x40 for p in peripheral.writes if p[0] == 0xBD)
 
 
-@pytest.mark.parametrize("maximum", [125, 140, 150])
-async def test_temperature_write_checks_live_maximum(client, peripheral, maximum):
-    from custom_components.aosmith_ble.const import MAX_SETPOINT, SETPOINT
-    from custom_components.aosmith_ble.protocol import encode_temperature
-
-    peripheral.registers[MAX_SETPOINT] = encode_temperature(maximum)
-    # A stale UI can ask above a newly lowered device limit; no mutation is sent.
-    with pytest.raises(ProtocolError, match="live permitted range"):
-        await client.set_value(SETPOINT, encode_temperature(maximum + 1))
-    assert client.commands[-1]["outcome"] == "not_sent"
-    assert not any(packet[1] == 0x40 for packet in peripheral.writes)
-    state = await client.set_value(SETPOINT, encode_temperature(maximum))
-    assert state.target_temperature == maximum
-    assert client.commands[-1]["outcome"] == "confirmed"
-
-
-@pytest.mark.parametrize("maximum", [None, 0, 0xFFFF])
-async def test_missing_maximum_allows_lowering_but_not_increasing_temperature(client, peripheral, maximum):
+@pytest.mark.parametrize("maximum", [None, 0, 0xFFFF, 0x33AB])
+async def test_temperature_can_increase_after_lowering_without_a_moving_ceiling(client, peripheral, maximum):
     from custom_components.aosmith_ble.const import MAX_SETPOINT, SETPOINT
     from custom_components.aosmith_ble.protocol import encode_temperature
 
     if maximum is not None:
         peripheral.registers[MAX_SETPOINT] = maximum
-    with pytest.raises(ProtocolError, match="live permitted range"):
-        await client.set_value(SETPOINT, encode_temperature(126))
-    assert not any(packet[1] == 0x40 for packet in peripheral.writes)
-    state = await client.set_value(SETPOINT, encode_temperature(124))
-    assert state.target_temperature == 124
+    for temperature in (124, 125, 140, 150):
+        state = await client.set_value(SETPOINT, encode_temperature(temperature))
+        assert state.target_temperature == temperature
+        assert client.commands[-1]["outcome"] == "confirmed"
+    writes = sum(packet[1] == 0x40 for packet in peripheral.writes)
+    for temperature in (94, 151):
+        with pytest.raises(ProtocolError, match="within"):
+            await client.set_value(SETPOINT, encode_temperature(temperature))
+        assert client.commands[-1]["outcome"] == "not_sent"
+    assert sum(packet[1] == 0x40 for packet in peripheral.writes) == writes
 
 
 @pytest.mark.parametrize("word", [0x00FB, 0xFFFB])
@@ -404,5 +393,5 @@ async def test_unknown_availability_keeps_full_word_without_creating_fault(word)
     assert state.availability == 251
     assert state.availability_word == word
     assert state.fault == 0
-    assert decode_availability(state.availability, "hps10_observed") is None
+    assert decode_availability(state.availability) is None
     await client.disconnect()

@@ -1,4 +1,4 @@
-"""One-step Vacation control and optional Hot Water Plus."""
+"""Vacation/Guest duration control and optional Hot Water Plus."""
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.exceptions import HomeAssistantError
@@ -10,34 +10,43 @@ from .protocol import encode_timed_mode
 
 async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    entities = [Vacation(coordinator)]
+    entities = [VacationGuestDuration(coordinator)]
     if entry.options.get("enable_hot_water_plus", False):
         entities.append(HotWaterPlus(coordinator))
     async_add_entities(entities)
 
 
-class Vacation(HeaterEntity, SelectEntity):
-    """Start Vacation and its duration in one command."""
+class VacationGuestDuration(HeaterEntity, SelectEntity):
+    """Adjust the active Vacation/Guest countdown; other modes display Off."""
 
-    _attr_name = "Vacation"
-    _attr_icon = "mdi:bag-suitcase"
-    _attr_options = ["Off", "Until changed"] + [
-        "1 day" if days == 1 else f"{days} days" for days in range(1, 100)
-    ]
+    _attr_name = "Vacation/Guest mode"
+    _attr_icon = "mdi:calendar-clock"
 
     def __init__(self, coordinator):
+        # Preserve the released control's entity identity and user customizations.
         super().__init__(coordinator, "vacation_duration")
+
+    @property
+    def options(self):
+        mode = self.coordinator.data.mode
+        if mode not in (2, 3):
+            return ["Off"]
+        maximum = 99 if mode == 2 else 7
+        return (
+            ["Off"]
+            + (["Until changed"] if mode == 2 else [])
+            + ["1 day" if days == 1 else f"{days} days" for days in range(1, maximum + 1)]
+        )
 
     @property
     def current_option(self):
         state = self.coordinator.data
-        if state.mode != 2:
+        if state.mode not in (2, 3):
             return "Off"
-        raw = state.registers.get("vacation_days")
-        if raw is None:
-            return None
-        days = raw & 0xFF
-        if days == 100:
+        key = "vacation_days" if state.mode == 2 else "guest_days"
+        raw = state.registers.get(key)
+        days = (raw & 0xFF) if raw is not None else state.mode_days
+        if state.mode == 2 and days == 100:
             return "Until changed"
         option = "1 day" if days == 1 else f"{days} days"
         return option if option in self.options else None
@@ -46,21 +55,21 @@ class Vacation(HeaterEntity, SelectEntity):
     def extra_state_attributes(self):
         return {
             "active_mode": MODE_NAMES.get(self.coordinator.data.mode),
-            "behavior": "Selecting days enters Vacation and starts the countdown from now",
+            "behavior": "Select Vacation or Guest on the water heater, then adjust its days here",
             "exit_mode": "Hybrid",
         }
 
     async def async_select_option(self, option):
         if not self.available or option not in self.options:
-            raise HomeAssistantError("Choose a valid Vacation duration on a connected heater")
+            raise HomeAssistantError("Select Vacation or Guest on the water heater before adjusting its days")
         mode = self.coordinator.data.mode
         if option == "Off":
-            if mode != 2:
+            if mode not in (2, 3):
                 return
-            value = 4  # Explicitly return to Hybrid, never guess a previous mode.
+            value = 4
         else:
             days = 100 if option == "Until changed" else int(option.split()[0])
-            value = encode_timed_mode("Vacation", days)
+            value = encode_timed_mode(MODE_NAMES[mode], days)
         await self.coordinator.async_set_value(MODE, value, expected_mode=mode)
 
 

@@ -11,7 +11,6 @@ from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import callback
 
 from .const import (
-    AVAILABILITY_SCALES,
     CONF_IDENTIFIER,
     CONF_INTERVAL,
     CONF_PIN,
@@ -227,10 +226,6 @@ class OptionsFlow(config_entries.OptionsFlow):
             step_id="settings",
             data_schema=vol.Schema(
                 {
-                    vol.Required(
-                        "availability_scale",
-                        default=clean_options(self.config_entry.options)["availability_scale"],
-                    ): vol.In(AVAILABILITY_SCALES),
                     vol.Required(
                         CONF_INTERVAL, default=self.config_entry.options.get(CONF_INTERVAL, DEFAULT_INTERVAL)
                     ): vol.All(vol.Coerce(int), vol.Range(min=15, max=300)),

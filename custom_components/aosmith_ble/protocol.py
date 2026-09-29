@@ -4,7 +4,6 @@ import hashlib
 import hmac
 import math
 
-from .const import DEFAULT_MAX_TEMP_F, MAX_TEMP_F, MIN_TEMP_F
 from .crc_table import CRC_TABLE
 
 
@@ -96,24 +95,11 @@ def decode_temperature(raw: int) -> float:
     return round(raw / 256 * 1.8 + 32, 1)
 
 
-def temperature_limit(raw: int | None, current: float) -> float:
-    """Honor a reported maximum; missing data never grants a temperature increase."""
-    if raw is not None:
-        maximum = decode_temperature(raw)
-        if MIN_TEMP_F <= maximum <= 180:
-            return min(MAX_TEMP_F, maximum)
-    return min(DEFAULT_MAX_TEMP_F, max(MIN_TEMP_F, current))
-
-
-def decode_availability(raw: int, scale: str) -> int | None:
-    """Apply only the explicitly selected scale; never infer one from a single byte."""
+def decode_availability(raw: int) -> int | None:
+    """HPS10 observed categories; unknown codes are not treated as Low."""
     if type(raw) is not int:
         return None
-    if scale == "hps10_observed":
-        # HPS10-80H45DV / firmware 6.4 observations, not a universal enum.
-        # The Low category's wire value has not been observed; do not guess it.
-        return {0: 50, 5: 100}.get(raw)
-    return None
+    return {0: 50, 5: 100}.get(raw)
 
 
 def encode_temperature(fahrenheit: float) -> int:

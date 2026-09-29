@@ -20,7 +20,6 @@ from .const import (
     ENERGY,
     HOT_WATER_PLUS,
     INSPECT_REGISTERS,
-    MAX_SETPOINT,
     NAME,
 )
 from .protocol import ProtocolError
@@ -58,7 +57,6 @@ class HeaterCoordinator(DataUpdateCoordinator):
         self.client = make_client(hass, entry.data)
         self.options = dict(entry.options)
         # Core controls and readings always request their supporting registers.
-        self.client.optional_registers["maximum_setpoint"] = MAX_SETPOINT
         self.client.optional_registers["energy_wh"] = ENERGY
         if entry.options.get("enable_hot_water_plus", False):
             self.client.optional_registers["hot_water_plus"] = HOT_WATER_PLUS

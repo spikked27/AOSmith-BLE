@@ -124,9 +124,8 @@ The next-generation WATER_AVAILABLE parser in iCOMM module 1422 returns the
 low byte of 27:23 unchanged. It does not establish a 0–5 percentage scale. The
 public cloud client uses a different numeric convention (`100 - hotWaterStatus`):
 https://github.com/bdr99/py-aosmith/blob/8d4eb7f1b75e1898227810ff9d007d8fd3291434/py_aosmith/client.py
-Neither path proves that the two fields share a scale. Thus the integration
-requires explicit per-entry calibration. The speculative 0–5 conversion was removed in 1.0.0; only the observed HPS10
-categories remain as an explicit calibration choice. Out-of-range bytes never
+Neither path proves that the two fields share a scale. The integration now defaults to the observed HPS10 categories. The speculative 0–5 conversion was removed in 1.0.0; only the observed HPS10
+categories remain, and version 1.1.0 makes them the fixed default. Out-of-range bytes never
 produce a fabricated percentage; raw bytes remain available for investigation.
 
 The owner’s 0.3.0 captures confirm request BDA0071B0703D8 and response
@@ -138,8 +137,9 @@ read ACK alone does not confirm register meaning or support for clock writes.
 
 ## Duration verification and clock call path
 
-The Vacation selector enters Vacation and sets duration in a single write.
-Selecting Off exits to Hybrid.
+The Vacation/Guest selector follows the current timed mode; outside those modes
+it displays Off. Mode entry through HA uses Vacation 7 days or Guest 1 day.
+Selecting Off while in either timed mode exits to Hybrid.
 The transport rereads 11:15 inside its lock before writing. A differing mode
 aborts without mutation. Exact command-word readback still confirms a write;
 when 11:15 returns only the requested low-byte mode, its corresponding
@@ -165,15 +165,17 @@ catalog. Its entry 330 cannot fit this parser and is deliberately not aliased to
 not a no-fault result. One Error status binary sensor replaces duplicate fault
 readings while retaining the existing fault-present unique ID.
 
-Temperature writes re-read 1:43 under the request lock, after checking live mode.
-A rejected/missing maximum permits no increase over the present setting and is
-capped at 140°F; a valid reported maximum permits up to 150°F. Other read errors
-stop the write. Confirmation still requires a subsequent setpoint readback.
+Version 1.1.0 removes register 1:43 and current setpoint from the write-ceiling
+calculation after the owner observed a shrinking maximum. The fallback had
+incorrectly prevented raising temperature after lowering it. Writes use the
+documented HPS10 95–150°F range, recheck live Vacation mode, and still require
+subsequent setpoint readback. Register 1:43 remains a read-only diagnostic candidate;
+no maximum-register override is written.
 
 
 ## Observed HPS10 availability categories
 
-The opt-in `hps10_observed` scale maps raw 0 to Medium/50% and raw 5 to High/100%.
+The default HPS10 mapping uses raw 0 to Medium/50% and raw 5 to High/100%.
 Captured frames `DB02091B17000080CA` and `DB02091B17000580AC` validate decoding;
 the semantic association comes from nearby owner app/official-HA screenshots,
 not from an APK-defined BLE enum. All other values remain unknown. See

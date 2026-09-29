@@ -22,26 +22,19 @@ class HeaterSensor(HeaterEntity, SensorEntity):
 
     def __init__(self, coordinator, key):
         super().__init__(coordinator, key)
-        self.scale = coordinator.options.get("availability_scale", "unverified")
 
     @property
     def native_value(self):
-        return decode_availability(self.coordinator.data.availability, self.scale)
+        return decode_availability(self.coordinator.data.availability)
 
     @property
     def extra_state_attributes(self):
-        attributes = {
-            "raw_value": self.coordinator.data.availability,
-            "scale": self.scale,
-            "calibration": "Choose HPS10 observed categories in Configure for the tested model",
+        raw = self.coordinator.data.availability
+        return {
+            "raw_value": raw,
+            "category": {0: "Medium", 5: "High"}.get(raw, "Unknown"),
+            "interpretation": "HPS10 categories, not measured remaining tank volume; Low code unverified",
         }
-        if self.scale == "hps10_observed":
-            attributes.update(
-                category={0: "Medium", 5: "High"}.get(self.coordinator.data.availability, "Unknown"),
-                interpretation="Observed HPS10 categories; percentage is not measured tank volume",
-                calibration="HPS10-80H45DV firmware 6.4; Low code not yet identified",
-            )
-        return attributes
 
 
 class EnergySensor(HeaterEntity, SensorEntity):
