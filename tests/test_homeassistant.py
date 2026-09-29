@@ -45,7 +45,7 @@ async def test_temperature_controls_are_standard_and_validated(coordinator):
 
 def test_sensors_preserve_raw_units(coordinator):
     availability = HeaterSensor(coordinator, "availability")
-    assert availability.native_value == 100
+    assert availability.native_value == 50
     assert availability.native_unit_of_measurement == "%"
     assert availability.extra_state_attributes["raw_value"] == 5
 
@@ -390,9 +390,7 @@ async def test_upgrade_retires_only_owned_demand_response_entities(tmp_path):
     await hass.async_stop()
 
 
-@pytest.mark.parametrize(
-    "scale,expected", [("hps10_observed", 100), ("unverified", 100), ("five_levels", 100)]
-)
+@pytest.mark.parametrize("scale,expected", [("hps10_observed", 50), ("unverified", 50), ("five_levels", 50)])
 def test_obsolete_availability_options_do_not_change_default_mapping(coordinator, scale, expected):
     coordinator.options = {"availability_scale": scale}
     sensor = HeaterSensor(coordinator, "availability")
@@ -655,7 +653,9 @@ def test_inactive_countdown_is_not_presented_as_current(coordinator):
     assert control.current_option == "Until changed"
 
 
-@pytest.mark.parametrize("raw,expected,category", [(0, 50, "Medium"), (5, 100, "High"), (1, None, "Unknown")])
+@pytest.mark.parametrize(
+    "raw,expected,category", [(0, 0, "Low"), (5, 50, "Medium"), (10, 100, "High"), (1, None, "Unknown")]
+)
 def test_hps10_category_sensor_preserves_identity_and_uncertainty(coordinator, raw, expected, category):
     coordinator.options = {"availability_scale": "hps10_observed"}
     coordinator.data = HeaterState(125, 4, raw, 0)

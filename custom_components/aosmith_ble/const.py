@@ -19,7 +19,7 @@ FAULT = (2, 7)
 MIN_TEMP_F = 95
 MAX_TEMP_F = 150
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 DEFAULT_MODE_DAYS = {2: 7, 3: 1}
 
 

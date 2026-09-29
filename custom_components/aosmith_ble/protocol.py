@@ -96,10 +96,10 @@ def decode_temperature(raw: int) -> float:
 
 
 def decode_availability(raw: int) -> int | None:
-    """HPS10 observed categories; unknown codes are not treated as Low."""
+    """HPS10 category mapping; other codes remain unknown."""
     if type(raw) is not int:
         return None
-    return {0: 50, 5: 100}.get(raw)
+    return {0: 0, 5: 50, 10: 100}.get(raw)
 
 
 def encode_temperature(fahrenheit: float) -> int:

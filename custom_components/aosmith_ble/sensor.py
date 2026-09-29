@@ -32,8 +32,8 @@ class HeaterSensor(HeaterEntity, SensorEntity):
         raw = self.coordinator.data.availability
         return {
             "raw_value": raw,
-            "category": {0: "Medium", 5: "High"}.get(raw, "Unknown"),
-            "interpretation": "HPS10 categories, not measured remaining tank volume; Low code unverified",
+            "category": {0: "Low", 5: "Medium", 10: "High"}.get(raw, "Unknown"),
+            "interpretation": "HPS10 categories, not measured remaining tank volume",
         }
 
 

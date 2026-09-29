@@ -1,7 +1,7 @@
-# Version 1.1.0 validation
+# Version 1.1.1 validation
 
 Reviewed September 29, 2026. Local environment: Python 3.13.15 and Home Assistant
-2025.12.5 with its Bluetooth/USB dependencies. **142 automated tests pass locally**, with Ruff lint and formatting checks passing.
+2025.12.5 with its Bluetooth/USB dependencies. **145 automated tests pass locally**, with Ruff lint and formatting checks passing.
 Automated checks use captured
 protocol fixtures and a simulated peripheral, not physical Bluetooth. See the
 GitHub Tests workflow for the release commit's results.
@@ -21,7 +21,7 @@ GitHub Tests workflow for the release commit's results.
 - Error status includes clock code 42, keeps unknown faults explicit and becomes
   unavailable after failed polls.
 - Grouped 48-bit energy reads, optional-read backoff and unknown data handling;
-  captured HPS10 High/Medium frames; unsupported availability codes remain unknown.
+  captured HPS10 raw 0/5/10 frames; unsupported availability codes remain unknown.
 - Five default entities; three disabled debug buttons; one-time debug migration
   that allows later user opt-in; old options cleared and retired registry entries removed
   without changing pairing credentials or purging recorder history.
@@ -42,8 +42,10 @@ On HPS10-80H45DV, reported firmware 6.4:
 - Reconnect and HA restart without reactivating the heater's Bluetooth.
 - Grouped energy reading 350.532 kWh agreed with the app's approximately 350 kWh;
   later captures progressed to 350.646 kWh.
-- Nearby app/cloud observations support raw 5 = High/100% and raw 0 = Medium/50%.
-  These were not atomic simultaneous captures; Low's BLE code remains unknown.
+- A later capture contains raw 10 twice with valid checksums and no fault.
+  The owner directed the corrected 0/5/10 → 0/50/100 mapping. Earlier nearby
+  screenshots were not simultaneous and no longer establish the previous mapping.
+  The byte values are captured; the revised category interpretation is owner-specified.
 
 ## Release limitations
 
