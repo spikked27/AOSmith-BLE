@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import math
 
+from .const import DEFAULT_MAX_TEMP_F, MAX_TEMP_F, MIN_TEMP_F
 from .crc_table import CRC_TABLE
 
 
@@ -95,17 +96,23 @@ def decode_temperature(raw: int) -> float:
     return round(raw / 256 * 1.8 + 32, 1)
 
 
+def temperature_limit(raw: int | None, current: float) -> float:
+    """Honor a reported maximum; missing data never grants a temperature increase."""
+    if raw is not None:
+        maximum = decode_temperature(raw)
+        if MIN_TEMP_F <= maximum <= 180:
+            return min(MAX_TEMP_F, maximum)
+    return min(DEFAULT_MAX_TEMP_F, max(MIN_TEMP_F, current))
+
+
 def decode_availability(raw: int, scale: str) -> int | None:
     """Apply only the explicitly selected scale; never infer one from a single byte."""
     if type(raw) is not int:
         return None
-    if scale == "five_levels" and 0 <= raw <= 5:
-        return raw * 20
-    if 0 <= raw <= 100:
-        if scale == "percent_remaining":
-            return raw
-        if scale == "percent_used":
-            return 100 - raw
+    if scale == "hps10_observed":
+        # HPS10-80H45DV / firmware 6.4 observations, not a universal enum.
+        # The Low category's wire value has not been observed; do not guess it.
+        return {0: 50, 5: 100}.get(raw)
     return None
 
 
@@ -150,7 +157,7 @@ class FrameBuffer:
 def encode_timed_mode(mode: str, days: int) -> int:
     """APK mode high byte is duration; Vacation 100 means continuously on."""
     codes = {"Electric": 1, "Vacation": 2, "Guest": 3}
-    maximum = {"Electric": 99, "Vacation": 100, "Guest": 7}
+    maximum = {"Electric": 7, "Vacation": 100, "Guest": 7}
     if mode not in codes or type(days) is not int or not 1 <= days <= maximum[mode]:
-        raise ValueError("Use Electric 1–99 days, Vacation 1–100 (100 = on), or Guest 1–7 days")
+        raise ValueError("Use Electric 1–7 days, Vacation 1–100 (100 = on), or Guest 1–7 days")
     return (days << 8) | codes[mode]

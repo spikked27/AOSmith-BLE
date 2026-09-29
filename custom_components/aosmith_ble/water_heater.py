@@ -6,7 +6,7 @@ from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN, MAX_TEMP_F, MIN_TEMP_F, MODE, MODE_NAMES, MODES, SETPOINT
 from .entity import HeaterEntity
-from .protocol import encode_temperature, encode_timed_mode
+from .protocol import encode_temperature, encode_timed_mode, temperature_limit
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -23,10 +23,8 @@ class Heater(HeaterEntity, WaterHeaterEntity):
 
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, "water_heater")
-        self._setpoint_enabled = entry.options.get("enable_setpoint_writes", True)
         self._attr_supported_features = WaterHeaterEntityFeature.OPERATION_MODE
-        if self._setpoint_enabled:
-            self._attr_supported_features |= WaterHeaterEntityFeature.TARGET_TEMPERATURE
+        self._attr_supported_features |= WaterHeaterEntityFeature.TARGET_TEMPERATURE
 
     @property
     def target_temperature(self):
@@ -39,22 +37,20 @@ class Heater(HeaterEntity, WaterHeaterEntity):
     @property
     def supported_features(self):
         features = WaterHeaterEntityFeature.OPERATION_MODE
-        if self._setpoint_enabled and self.coordinator.data.mode != 2:
+        if self.coordinator.data.mode != 2:
             features |= WaterHeaterEntityFeature.TARGET_TEMPERATURE
         return features
 
     async def async_set_operation_mode(self, operation_mode):
         if operation_mode not in MODES:
             raise HomeAssistantError("Unsupported mode")
-        # A normal mode selection has an explicit duration; custom duration uses our action.
+        # Custom duration is available on the device page and through our action.
         value = {"Vacation": encode_timed_mode("Vacation", 100), "Guest": encode_timed_mode("Guest", 1)}.get(
             operation_mode, MODES[operation_mode]
         )
         await self.coordinator.async_set_value(MODE, value)
 
     async def async_set_temperature(self, **kwargs):
-        if not self._setpoint_enabled:
-            raise HomeAssistantError("Enable setpoint writes in integration options first")
         if self.coordinator.data.mode == 2:
             raise HomeAssistantError("Leave Vacation mode before changing the temperature")
         try:
@@ -62,24 +58,24 @@ class Heater(HeaterEntity, WaterHeaterEntity):
         except (KeyError, TypeError, ValueError) as err:
             raise HomeAssistantError("Provide a valid temperature") from err
         if not MIN_TEMP_F <= temperature <= self.max_temp:
-            raise HomeAssistantError(f"Choose a temperature from {MIN_TEMP_F} to {self.max_temp} °F")
+            raise HomeAssistantError(
+                f"Choose a temperature from {MIN_TEMP_F} to {self.max_temp} °F. "
+                "To raise the heater's remote-control maximum, use its physical controls, then refresh."
+            )
         await self.coordinator.async_set_value(SETPOINT, encode_temperature(temperature))
 
     @property
     def max_temp(self):
-        from .protocol import decode_temperature
-
-        raw = self.coordinator.data.registers.get("maximum_setpoint")
-        if raw is not None:
-            maximum = decode_temperature(raw)
-            if MIN_TEMP_F <= maximum <= 180:
-                return min(MAX_TEMP_F, maximum)
-        return MAX_TEMP_F
+        return temperature_limit(
+            self.coordinator.data.registers.get("maximum_setpoint"), self.target_temperature
+        )
 
     @property
     def extra_state_attributes(self):
         return {
+            "remote_temperature_maximum_f": self.max_temp,
             "mode_duration_raw": self.coordinator.data.mode_days,
             "vacation_selection": "On until changed",
-            "guest_selection": "1 day; use set_timed_mode for another duration",
+            "guest_selection": "1 day; use Set timed mode for another duration",
+            "vacation_control": "Choose days in Vacation to enter Vacation in one step",
         }

@@ -2,7 +2,7 @@
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 
-from .const import DOMAIN
+from .const import DOMAIN, clean_options
 from .coordinator import HeaterCoordinator
 
 PLATFORMS = [
@@ -24,10 +24,26 @@ async def async_setup(hass, config):
 async def async_setup_entry(hass, entry):
     from homeassistant.helpers import entity_registry as er
 
-    # Retire only this integration's demand-response entities; preserve history.
+    # Keep only supported user settings; pairing credentials remain in entry.data.
+    options = clean_options(entry.options)
+    if options != entry.options:
+        hass.config_entries.async_update_entry(entry, options=options)
+
+    # Retire only this integration's removed entities; preserve history.
     registry = er.async_get(hass)
     retired = {"utility_override", "advanced_load", "utility_enrollment", "cta_present"}
     retired |= {key + "_control" for key in retired}
+    retired |= {
+        "tariff",
+        "fault",
+        "target_temperature",
+        "maximum_setpoint",
+        "remote_setpoint",
+        "vacation_days",
+        "guest_days",
+        "electric_days",
+        "mode_duration",
+    }
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
         if entity.platform == DOMAIN and any(entity.unique_id.endswith("_" + key) for key in retired):
             if entity.disabled_by is None:
@@ -35,7 +51,11 @@ async def async_setup_entry(hass, entry):
                     entity.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
                 )
     coordinator = HeaterCoordinator(hass, entry)
-    await coordinator.async_config_entry_first_refresh()
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except BaseException:
+        await coordinator.client.disconnect()
+        raise
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
     async def stop(_event):
@@ -60,3 +80,25 @@ async def async_unload_entry(hass, entry):
         coordinator = hass.data[DOMAIN].pop(entry.entry_id)
         await coordinator.client.disconnect()
     return unloaded
+
+
+async def async_migrate_entry(hass, entry):
+    """Retire the draft's default-enabled debug controls once, not on each reload."""
+    from homeassistant.helpers import entity_registry as er
+
+    if entry.version > 1:
+        return False
+    if entry.minor_version < 2:
+        registry = er.async_get(hass)
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if (
+                entity.platform == DOMAIN
+                and entity.domain == "button"
+                and any(entity.unique_id.endswith("_" + key) for key in ("refresh", "reconnect", "inspect"))
+                and entity.disabled_by is None
+            ):
+                registry.async_update_entity(
+                    entity.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
+                )
+        hass.config_entries.async_update_entry(entry, minor_version=2, options=clean_options(entry.options))
+    return True

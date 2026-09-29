@@ -8,17 +8,18 @@ heat pumps, electric, gas, tankless and recirculation products with other maps.
 |---|---|---|
 | Local pairing and reconnect | Implemented; hardware tested | Additional models, proxy and pairing-slot tests |
 | Temperature and Electric/Hybrid/Heat Pump | Implemented; hardware tested | Wider model coverage |
-| Vacation/Guest/timed Electric | Implemented; APK-derived | Physical display and remaining-days checks |
+| Vacation/Guest/timed Electric | One-step Vacation control and mode/days action; APK-derived | Physical display and remaining-days checks |
 | Hot Water Plus 0–3 | Implemented, opt-in BEST profile feature | Supported heater and mode interaction check |
 | Utility demand-response pause | Removed from product scope | Raw read-only research capture remains |
-| Advanced load-up flag | Removed from product scope | Separate from future tariff preheating |
+| Advanced load-up flag | Removed from product scope | No utility writes exposed |
 | Utility enrollment device flag | Removed from product scope | No account enrollment |
-| Remaining days | Optional diagnostic sensors | Firmware-specific sentinels and availability |
-| Hot-water availability | Percent entity with explicit calibration; raw attribute retained | Verify the scale against iCOMM at more than one level |
-| Fault status | Raw code and fault-present entity | Model-specific code descriptions |
+| Remaining days | Vacation control reads active countdown; other timed modes available through action | Firmware-specific sentinels and expiry |
+| Hot-water availability | Explicit HPS10 observed categories: raw 0 → 50%, raw 5 → 100%; raw attribute retained | Low code, recovery confirmation and other models |
+| Fault status | One Error status problem entity with readable current fault, including clock code 42 | Additional model/firmware validation |
 | Energy use and history | Local cumulative kWh sensor | Heating-cycle delta, reset behavior and other models |
 | Actual tank temperature / running components | No confirmed local mapping | Telemetry source and units |
-| Utility tariff lookup | Anonymous lookup and cached seasonal/holiday preview | Optional remote API may change; no heater programming yet |
+| Utility tariff lookup | Removed; use official iCOMM app | No tariff network access or cache retained |
+| Device clock and timezone | No clock writer; clock-unset code 42 included in Error status | Needed to validate heater-owned offline TOU; no verified next-gen writer |
 | On-heater schedules and holidays | Located, not enabled | Complete round-trip/backup/restore before writes |
 | Cloud notifications and energy graphs | Use HA automations/history once data exists | No cloud history imported |
 | Wi-Fi setup, account sharing and utility signup | Outside local heater-control scope | Require separate network/account workflows |
@@ -26,11 +27,12 @@ heat pumps, electric, gas, tankless and recirculation products with other maps.
 
 ## Next evidence to collect
 
-1. Confirm the energy entity tracks the app across a heating cycle. Inspect twice
-   at least two minutes apart for timestamped candidate clock values.
+1. Confirm the energy entity tracks the app across a heating cycle. Repeated zero
+   clock captures have already been collected; repeating those is not a next step.
 2. Test one-day Vacation then return to the previous mode; compare countdown.
 3. Test Guest duration and restore. Test boost only on a model that offers it.
-4. Capture/compare an existing time-of-use plan before any schedule programming.
+4. During normal use/recovery, note any new availability code and matching app
+   category. High/Medium have an observed HPS10 mapping; Low is not yet identified.
 
 A passing simulated peripheral test checks our encoding and recovery; it does
 not prove that an optional feature exists on a particular heater. Contributions

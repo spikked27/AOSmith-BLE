@@ -20,6 +20,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class DebugButton(HeaterEntity, ButtonEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
 
     def __init__(self, coordinator, action):
         super().__init__(coordinator, action)

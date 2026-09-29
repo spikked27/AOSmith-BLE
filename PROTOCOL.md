@@ -67,7 +67,7 @@ that every model implements every register.
 | 11:19 | Electric remaining days | Low byte |
 | 11:20 | Hot Water Plus | 0–3; BEST family only, opt-in |
 | 27:3 | Utility override / demand-response pause | Write 0000 or 0001 |
-| 27:7–9 | Electric power usage words 2,1,0 | Read-only diagnostic capture, units unknown |
+| 27:7–9 | Electric power usage words 2,1,0 | 48-bit Wh, exposed as kWh |
 | 27:10–12 | Grid present energy words 2,1,0 | Read-only diagnostic capture, units unknown |
 | 27:13–15 | Grid total energy words 2,1,0 | Read-only diagnostic capture, units unknown |
 | 27:25 | CTA utility module present | Low byte boolean, read only |
@@ -101,21 +101,21 @@ therefore assumed to equal the cloud lifetime counter. No arbitrary register
 write or opaque schedule-upload action is exposed.
 
 
-## 0.3.0 energy and tariff changes
+## Energy and retired tariff functionality
 
 The electrical-use words at 27:7–9 combine MSW first into a 48-bit Wh counter.
 Observed words 0000 0005 5944 produce 350532 Wh, consistent with the owner’s
 approximately 350 kWh app reading. Normal polling now requests count=3 in one A0
 read (response length 13), avoiding separately sampled rollover words. Scaling
-is supported by one paired observation; progression/reset behavior and the
-new grouped request still require physical validation. Missing/error/all-FFFF
+is supported by one paired observation; progression/reset behavior still requires physical validation.
+The grouped request/reply was subsequently confirmed on hardware. Missing/error/all-FFFF
 responses never become a false zero. The grid-energy groups remain undecoded.
 
-Tariff lookup is separate from transport. The selected plan is only a local
-cache. No schedule, clock, preference or enrollment writes occur on selection.
+The former tariff lookup/cache was removed in development 0.3.2.dev1.
+Use iCOMM for tariff setup; this component exposes no schedule programming.
 Manual inspection includes candidate clock words 26:3–4 from the older-profile
 APK clock writer; their meaning on next-generation heaters remains unverified.
-See TARIFF.md for the full list of pending protocol/hardware checks.
+See RESEARCH.md for the clock and schedule findings.
 
 
 ## 0.3.1 availability and clock evidence
@@ -125,8 +125,8 @@ low byte of 27:23 unchanged. It does not establish a 0–5 percentage scale. The
 public cloud client uses a different numeric convention (`100 - hotWaterStatus`):
 https://github.com/bdr99/py-aosmith/blob/8d4eb7f1b75e1898227810ff9d007d8fd3291434/py_aosmith/client.py
 Neither path proves that the two fields share a scale. Thus the integration
-requires explicit per-entry calibration. The 0–5 conversion is offered as an
-estimate, not silently selected as a device fact. Out-of-range bytes never
+requires explicit per-entry calibration. The speculative 0–5 conversion was removed in 1.0.0; only the observed HPS10
+categories remain as an explicit calibration choice. Out-of-range bytes never
 produce a fabricated percentage; raw bytes remain available for investigation.
 
 The owner’s 0.3.0 captures confirm request BDA0071B0703D8 and response
@@ -134,3 +134,62 @@ DB020D1B0700000005594480F0 for the 48-bit energy counter. A credential-free
 fixture verifies this exact grouped response. Candidate clock words 26:3 and
 26:4 both remain zero at two captures about four minutes apart. A successful
 read ACK alone does not confirm register meaning or support for clock writes.
+
+
+## Duration verification and clock call path
+
+The Vacation selector enters Vacation and sets duration in a single write.
+Selecting Off exits to Hybrid.
+The transport rereads 11:15 inside its lock before writing. A differing mode
+aborts without mutation. Exact command-word readback still confirms a write;
+when 11:15 returns only the requested low-byte mode, its corresponding
+remaining-days status (11:17/18/19) must also equal the requested duration.
+This second confirmation path is simulated, not yet observed on the owner's
+hardware. No unconfirmed write is replayed. Normal polling always reads the active countdown.
+
+The app connection generator #13456 checks `heatPump` before calling
+`setEssentialParams` (#13493), which invokes `setClock` (#14611). Bytecode offsets
+0x8E–0xAA establish that profile guard. Consequently, the block-26 clock writer
+is not established for the next-generation heater. Four zero captures do not
+resolve it. See RESEARCH.md; do not reuse the older writer as a generic clock action.
+
+
+## Consolidated fault decoding and final review
+
+Block 2:7 uses the low byte for the current fault (APK module 1422); the full
+word is retained in attributes/diagnostics. Module 1488 selects catalog 1489
+for the next-generation profile. Code 0 means no fault reported; 42 means clock
+not set. `faults.py` supplies short labels for all byte-sized codes in that
+catalog. Its entry 330 cannot fit this parser and is deliberately not aliased to
+74. Unknown byte codes remain explicit problems. A failed poll is unavailable,
+not a no-fault result. One Error status binary sensor replaces duplicate fault
+readings while retaining the existing fault-present unique ID.
+
+Temperature writes re-read 1:43 under the request lock, after checking live mode.
+A rejected/missing maximum permits no increase over the present setting and is
+capped at 140°F; a valid reported maximum permits up to 150°F. Other read errors
+stop the write. Confirmation still requires a subsequent setpoint readback.
+
+
+## Observed HPS10 availability categories
+
+The opt-in `hps10_observed` scale maps raw 0 to Medium/50% and raw 5 to High/100%.
+Captured frames `DB02091B17000080CA` and `DB02091B17000580AC` validate decoding;
+the semantic association comes from nearby owner app/official-HA screenshots,
+not from an APK-defined BLE enum. All other values remain unknown. See
+RESEARCH.md for timestamps and model/firmware scope. Never treat every unknown
+code as Low, nor treat Low as a heater fault.
+
+
+## Version 1.0.0 limits and Low availability
+
+The integration limits timed Electric to the HPS10 manual's 1–7 days, despite
+broader generic app choices. Vacation allows 1–99 or 100 (indefinite); Guest 1–7.
+The public action validates these ranges before issuing a write.
+
+The APK's `hexToInt` helper uses `parseInt(value, 16)`; the next-generation
+WATER_AVAILABLE path selects the low byte without signed conversion. A signed
+8-bit -5 would appear as 251 (0xFB); a signed 16-bit -5 as 65531 (0xFFFB), still
+251 after the app's low-byte extraction. Neither has an established Low meaning.
+The full raw word is now retained as `state.availability_word` in diagnostics.
+No unknown availability code is converted to an error or guessed percentage.

@@ -15,23 +15,40 @@ SETPOINT = (11, 0)
 MODE = (11, 15)
 AVAILABILITY = (27, 23)
 FAULT = (2, 7)
-# Conservative initial UI range; do not silently expand the device limit.
+# HPS10 manual permits 150 F; remote control still honors the reported maximum.
 MIN_TEMP_F = 95
-MAX_TEMP_F = 140
+MAX_TEMP_F = 150
+DEFAULT_MAX_TEMP_F = 140
 
-VERSION = "0.3.1"
+VERSION = "1.0.0"
 AVAILABILITY_SCALES = {
     "unverified": "Not calibrated",
-    "five_levels": "0–5 levels (estimated 20% steps)",
-    "percent_remaining": "0–100 percent remaining",
-    "percent_used": "0–100 percent used (inverted)",
+    "hps10_observed": "HPS10 observed categories (0 = 50%, 5 = 100%)",
 }
+
+
+def clean_options(options):
+    """Retain only supported user preferences; never guess an old numeric scale."""
+    return {
+        CONF_INTERVAL: options.get(CONF_INTERVAL, DEFAULT_INTERVAL),
+        "availability_scale": options.get("availability_scale", "unverified")
+        if options.get("availability_scale") in AVAILABILITY_SCALES
+        else "unverified",
+        "enable_hot_water_plus": options.get("enable_hot_water_plus", False),
+    }
+
+
 ENERGY = (27, 7)
 MAX_SETPOINT = (1, 43)
 REMOTE_SETPOINT = (11, 6)
 VACATION_DAYS = (11, 17)
 GUEST_DAYS = (11, 18)
 ELECTRIC_DAYS = (11, 19)
+TIMED_MODE_REGISTERS = {
+    1: ("electric_days", ELECTRIC_DAYS),
+    2: ("vacation_days", VACATION_DAYS),
+    3: ("guest_days", GUEST_DAYS),
+}
 HOT_WATER_PLUS = (11, 20)
 UTILITY_OVERRIDE = (27, 3)
 CTA_PRESENT = (27, 25)

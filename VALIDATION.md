@@ -1,47 +1,63 @@
-# Validation of development preview 0.3.1
+# Version 1.0.0 validation
 
-September 29, 2026. Python 3.13.15 and Home Assistant 2025.12.5 with its
-Bluetooth/USB dependencies. Ruff lint and formatting checks pass.
+Reviewed September 29, 2026. Local environment: Python 3.13.15 and Home Assistant
+2025.12.5 with its Bluetooth/USB dependencies. **145 automated tests pass locally**, with Ruff lint and formatting checks passing.
+Automated checks use captured
+protocol fixtures and a simulated peripheral, not physical Bluetooth. See the
+GitHub Tests workflow for the release commit's results.
 
-88 automated tests cover captured read packets, exact APK CRC, temperature and
-timed-mode encoding, synthetic HMAC, framing, authentication/recovery, serialized
-requests, write/readback and uncertain writes without replay. New coverage checks
-optional-register rejection, timeout/backoff without losing core readings, manual
-read-only inspection retry, boost's live mode prerequisite, per-heater timed action
-targeting, optional-entity availability, exact A5 switch encoding, feature options,
-and service UI selectors on the minimum supported HA test runtime. Version 0.3.0
-adds grouped energy reads, invalid/unsupported energy without fabricated zeros,
-tariff HTTP/GraphQL error handling, season/holiday preservation, settings/cache
-isolation, offline preview, and scoped retirement of legacy utility entities. Version 0.3.1 adds explicit
-availability-scale boundaries, raw-value retention, the captured grouped-energy
-reply, offline recovery-button use, obsolete notification rejection and live
-Vacation-mode temperature-write prevention.
+## Software coverage
 
-One upstream aiohttp/Home Assistant deprecation warning remains during import.
-The tests do not connect to physical BLE hardware.
+- Discovery by name/service, shared HA scan, manual fallback, per-device setup,
+  identifier validation and reuse without duplicate enrollment.
+- Serialized requests, read recovery, stale-notification rejection, failed-setup
+  and unload cleanup, and no automatic write replay.
+- One-step Vacation selection from every supported mode, duration bounds,
+  indefinite sentinel, Off-to-Hybrid, stale-mode guard and device countdown
+  readback. A targeted mode/days action supports Guest and Electric as well.
+- Temperature editor and writes respect Vacation mode and live remote limits
+  through 150°F. An unknown maximum cannot authorize an increase.
+- Error status includes clock code 42, keeps unknown faults explicit and becomes
+  unavailable after failed polls.
+- Grouped 48-bit energy reads, optional-read backoff and unknown data handling;
+  captured HPS10 High/Medium frames; unsupported availability codes remain unknown.
+- Five default entities; three disabled debug buttons; one-time debug migration
+  that allows later user opt-in; old options and duplicate entities retired
+  without changing pairing credentials or deleting history.
+- Redacted diagnostics with bounded event/command histories and full availability
+  word preservation, including hypothetical signed -5 representations.
+- Manifest, HACS layout, English strings, action schema and release packaging.
 
-## Owner-confirmed hardware results
+Ruff lint/format and pytest must pass before release. One upstream aiohttp/Home
+Assistant deprecation warning is present in the minimum-version environment.
 
-Model HPS10-80H45DV, reported firmware 6.4:
+## Owner-confirmed hardware behavior
 
-- Authentication, register reads and Hybrid → Heat Pump → Hybrid using nRF Connect.
-- 30-minute continuous HA connection with working controls and temperature status.
-- HA setpoint 125 → 124 → 125°F, checked against the heater's physical display.
-- Reconnect Bluetooth action without pressing the heater Bluetooth button.
-- Automatic reconnection after Home Assistant restart without pressing that button.
-- 0.3.0 grouped three-word energy request/reply: 350.532 kWh.
-- Anonymous PSEG 195 tariff selection persisted with all ten events and holidays.
-- Two successful clock-candidate captures about four minutes apart both read zero;
-  they do not validate clock mapping or synchronization.
+On HPS10-80H45DV, reported firmware 6.4:
 
-## Still to validate
+- Authentication, register reads and Hybrid → Heat pump → Hybrid.
+- At least 30 minutes of continuous HA connection with working controls/status.
+- Setpoint 125 → 124 → 125°F checked against the physical display.
+- Reconnect and HA restart without reactivating the heater's Bluetooth.
+- Grouped energy reading 350.532 kWh agreed with the app's approximately 350 kWh;
+  later captures progressed to 350.646 kWh.
+- Nearby app/cloud observations support raw 5 = High/100% and raw 0 = Medium/50%.
+  These were not atomic simultaneous captures; Low's BLE code remains unknown.
 
-Version 0.2.0 timed modes, remaining days, utility registers, and Hot Water Plus
-(on supported models) are APK-derived and have not yet been hardware tested.
-The local 350.532 kWh interpretation matches the owner’s approximately 350 kWh
-app value. Grouped reads are now hardware confirmed; heating-cycle deltas and reset
-behavior still need testing. Tariff lookup/cache is implemented; clock synchronization and
-on-heater schedule programming remain unimplemented pending validation.
-Discovery retest, additional adapters/proxies/models, multi-slot pairing, long
-radio idle or heater power interruption, and internet-blocked endurance remain
-open. Passing these tests is not a claim of universal iCOMM compatibility.
+## Release limitations
+
+Finite Vacation/Guest/Electric countdowns, expiry and recovery are software-tested
+but not physically validated. The one-step Vacation UI and migration are new in
+this release. The manual describes nine hours of Vacation recovery; Electric is
+limited to its documented 1–7 days. No claimed exact return time or power-loss
+countdown persistence is inferred from the command encoding.
+
+Additional models, active Bluetooth proxies, pairing-slot limits, long radio
+idle/power recovery, energy-counter reset behavior, Hot Water Plus and
+internet-blocked endurance remain unverified. Generic setup does not imply support
+for every iCOMM family.
+
+No verified next-generation clock writer is exposed. Clock fault 42 reports an
+unset clock, not its accuracy or timezone. Utility setup remains in the official
+app, and heater-owned offline TOU timing is not guaranteed. Repeated zero clock
+candidate reads have not established their meaning; no repeat is requested.

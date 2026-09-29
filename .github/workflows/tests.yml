@@ -31,3 +31,51 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest -q
+      - name: Build install archive
+        run: python scripts/build_release.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aosmith-ble-release
+          path: dist/aosmith_ble.zip
+          if-no-files-found: error
+  release:
+    needs: tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: aosmith-ble-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: aosmith-ble-release
+          path: dist
+      - name: Publish versioned release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+          version = json.loads(Path('custom_components/aosmith_ble/manifest.json').read_text())['version']
+          if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
+              raise SystemExit('Refusing to publish a non-stable version')
+          tag = f'v{version}'
+          existing = subprocess.run(['gh', 'release', 'view', tag], capture_output=True)
+          if existing.returncode == 0:
+              print(f'{tag} already released; leaving it unchanged')
+          else:
+              subprocess.run([
+                  'gh', 'release', 'create', tag, 'dist/aosmith_ble.zip',
+                  '--target', os.environ['GITHUB_SHA'],
+                  '--title', f'AO Smith Local BLE {version}',
+                  '--notes-file', 'RELEASE_NOTES.md',
+              ], check=True)
+          PY

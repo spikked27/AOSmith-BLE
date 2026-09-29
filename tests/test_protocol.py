@@ -88,7 +88,7 @@ def test_identifier_validation(identifier):
 
 
 @pytest.mark.parametrize(
-    "mode,days,expected", [("Vacation", 100, 0x6402), ("Guest", 7, 0x0703), ("Electric", 99, 0x6301)]
+    "mode,days,expected", [("Vacation", 100, 0x6402), ("Guest", 7, 0x0703), ("Electric", 7, 0x0701)]
 )
 def test_timed_modes(mode, days, expected):
     from custom_components.aosmith_ble.protocol import encode_timed_mode
@@ -98,7 +98,7 @@ def test_timed_modes(mode, days, expected):
 
 @pytest.mark.parametrize(
     "mode,days",
-    [("Guest", 8), ("Vacation", 0), ("Electric", 100), ("Hybrid", 1), ("Vacation", 1.5), ("Guest", True)],
+    [("Guest", 8), ("Vacation", 0), ("Electric", 8), ("Hybrid", 1), ("Vacation", 1.5), ("Guest", True)],
 )
 def test_invalid_timed_modes(mode, days):
     from custom_components.aosmith_ble.protocol import encode_timed_mode
@@ -110,23 +110,15 @@ def test_invalid_timed_modes(mode, days):
 @pytest.mark.parametrize(
     "raw,scale,expected",
     [
-        (0, "five_levels", 0),
-        (1, "five_levels", 20),
-        (2, "five_levels", 40),
-        (3, "five_levels", 60),
-        (4, "five_levels", 80),
-        (5, "five_levels", 100),
-        (6, "five_levels", None),
-        (255, "five_levels", None),
-        (-1, "five_levels", None),
-        (0, "percent_used", 100),
-        (100, "percent_used", 0),
-        (101, "percent_used", None),
-        (40, "percent_remaining", 40),
-        (101, "percent_remaining", None),
+        (5, "five_levels", None),
+        (0, "percent_used", None),
+        (40, "percent_remaining", None),
         (5, "unverified", None),
         (5, "unknown_profile", None),
-        (True, "five_levels", None),
+        (True, "hps10_observed", None),
+        (-5, "hps10_observed", None),
+        (251, "hps10_observed", None),
+        (65531, "hps10_observed", None),
     ],
 )
 def test_availability_never_guesses_or_clamps_invalid_values(raw, scale, expected):
@@ -140,3 +132,24 @@ def test_confirmed_grouped_energy_response():
 
     assert read_frame(27, 7, 3).hex().upper() == "BDA0071B0703D8"
     assert read_words(bytes.fromhex("DB020D1B0700000005594480F0"), 27, 7, 3) == (0, 5, 22852)
+
+
+@pytest.mark.parametrize(
+    "frame_hex,expected",
+    [
+        ("DB02091B17000080CA", 50),
+        ("DB02091B17000580AC", 100),
+    ],
+)
+def test_observed_hps10_availability_frames(frame_hex, expected):
+    from custom_components.aosmith_ble.protocol import decode_availability
+
+    raw = read_value(bytes.fromhex(frame_hex), 27, 23)
+    assert decode_availability(raw, "hps10_observed") == expected
+
+
+@pytest.mark.parametrize("raw", [-1, 1, 2, 3, 4, 6, 255, True, None])
+def test_hps10_unobserved_availability_is_unknown(raw):
+    from custom_components.aosmith_ble.protocol import decode_availability
+
+    assert decode_availability(raw, "hps10_observed") is None

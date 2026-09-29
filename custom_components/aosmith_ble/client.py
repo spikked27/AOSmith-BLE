@@ -11,7 +11,18 @@ from typing import Any
 
 from bleak.exc import BleakError
 
-from .const import AVAILABILITY, FAULT, HOT_WATER_PLUS, MODE, NOTIFY_UUID, SETPOINT, WRITE_UUID
+from .const import (
+    AVAILABILITY,
+    FAULT,
+    HOT_WATER_PLUS,
+    MAX_SETPOINT,
+    MIN_TEMP_F,
+    MODE,
+    NOTIFY_UUID,
+    SETPOINT,
+    TIMED_MODE_REGISTERS,
+    WRITE_UUID,
+)
 from .protocol import (
     FrameBuffer,
     ProtocolError,
@@ -22,6 +33,7 @@ from .protocol import (
     frame,
     read_frame,
     read_words,
+    temperature_limit,
     validate_identifier,
     write_frame,
 )
@@ -37,6 +49,7 @@ class HeaterState:
     fault: int
     mode_days: int = 0
     registers: dict[str, int] = field(default_factory=dict)
+    availability_word: int | None = None
 
 
 class HeaterClient:
@@ -70,6 +83,7 @@ class HeaterClient:
         self._timeout = timeout
         self._spacing = spacing
         self.events = deque(maxlen=60)
+        self.commands = deque(maxlen=20)
         self.connections = 0
         self.authentications = 0
         self.enrollment_attempted = False
@@ -91,6 +105,7 @@ class HeaterClient:
             "connections": self.connections,
             "authentications": self.authentications,
             "events": list(self.events),
+            "commands": list(self.commands),
             "optional_errors": dict(self.optional_errors),
             "extended_capture": self.extended_capture,
         }
@@ -223,7 +238,12 @@ class HeaterClient:
         mode = await self._read(MODE)
         availability = await self._read(AVAILABILITY)
         fault = await self._read(FAULT)
-        registers = await self._read_optional(self.optional_registers)
+        requested = dict(self.optional_registers)
+        if mode & 0xFF in TIMED_MODE_REGISTERS:
+            key, register = TIMED_MODE_REGISTERS[mode & 0xFF]
+            # The active countdown is part of the standard state.
+            requested = {key: register, **requested}
+        registers = await self._read_optional(requested)
         return HeaterState(
             decode_temperature(temperature),
             mode & 0xFF,
@@ -231,6 +251,7 @@ class HeaterClient:
             fault,
             mode >> 8,
             registers,
+            availability_word=availability,
         )
 
     async def _read_optional(self, registers, *, retry_unsupported=False):
@@ -308,18 +329,44 @@ class HeaterClient:
                     raise
         raise ProtocolError("No state received")
 
-    async def set_value(self, register, value: int) -> HeaterState:
+    async def set_value(self, register, value: int, *, expected_mode=None) -> HeaterState:
         async with self._lock:
+            command = {
+                "time": datetime.now(timezone.utc).isoformat(),
+                "register": list(register),
+                "value": value,
+                "expected_mode": expected_mode,
+                "outcome": "not_sent",
+            }
+            self.commands.append(command)
             try:
                 await self._ensure_session()
                 # Read first: renew an expired session before issuing a mutation.
-                await self._read(register)
-                if register == SETPOINT and (await self._read(MODE) & 0xFF) == 2:
-                    raise ProtocolError("Leave Vacation mode before changing the temperature")
+                current = await self._read(register)
+                if expected_mode is not None:
+                    live_mode = current if register == MODE else await self._read(MODE)
+                    if (live_mode & 0xFF) != expected_mode:
+                        raise ProtocolError("Mode changed on the heater; refresh before setting its duration")
+                if register == SETPOINT:
+                    if (await self._read(MODE) & 0xFF) == 2:
+                        raise ProtocolError("Leave Vacation mode before changing the temperature")
+                    try:
+                        maximum_raw = await self._read(MAX_SETPOINT)
+                    except StatusError as err:
+                        if err.code != 1:
+                            raise
+                        maximum_raw = None
+                    maximum = temperature_limit(maximum_raw, decode_temperature(current))
+                    if not MIN_TEMP_F <= decode_temperature(value) <= maximum:
+                        raise ProtocolError(
+                            f"Temperature exceeds the live permitted range ({MIN_TEMP_F}–{maximum} °F); "
+                            "refresh and check the heater's physical controls"
+                        )
                 if register == HOT_WATER_PLUS and (await self._read(MODE) & 0xFF) not in (1, 4, 5):
                     raise ProtocolError("Hot Water Plus requires Electric, Hybrid or Heat pump mode")
                 await asyncio.sleep(self._spacing)
                 self._record("tx", frame=write_frame(*register, value).hex().upper())
+                command["outcome"] = "unconfirmed"
                 async with asyncio.timeout(self._timeout):
                     await self._client.write_gatt_char(
                         WRITE_UUID,
@@ -329,9 +376,25 @@ class HeaterClient:
                 # The captured write ACK was not supplied. Success comes from readback.
                 for _ in range(3):
                     await asyncio.sleep(self._spacing)
-                    if await self._read(register) == value:
-                        return await self._snapshot()
+                    actual = await self._read(register)
+                    confirmed = actual == value
+                    # Accept a mode-only readback only when its separate,
+                    # app-defined countdown register also confirms the duration.
+                    if not confirmed and register == MODE and value >> 8 and actual == (value & 0xFF):
+                        timer = TIMED_MODE_REGISTERS.get(value & 0xFF)
+                        if timer is not None:
+                            confirmed = (await self._read(timer[1]) & 0xFF) == value >> 8
+                    if confirmed:
+                        command["outcome"] = "confirmed"
+                        state = await self._snapshot()
+                        command["refresh"] = "ok"
+                        return state
                 raise ProtocolError("Heater did not confirm the requested setting; write was not repeated")
+            except (BleakError, TimeoutError, ProtocolError) as err:
+                # Backend exception text can contain Bluetooth addresses.
+                command["error"] = str(err) if isinstance(err, ProtocolError) else type(err).__name__
+                await self._close()
+                raise
             except BaseException:
                 await self._close()
                 raise

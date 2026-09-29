@@ -34,6 +34,7 @@ class FakePeripheral:
         self.delay = 0
         self.active_writes = 0
         self.max_active_writes = 0
+        self.separate_duration_status = False
 
     async def connect(self, callback):
         self.is_connected = True
@@ -100,6 +101,13 @@ class FakePeripheral:
             elif opcode == 0x40:
                 if self.apply_write:
                     self.registers[tuple(data[3:5])] = int.from_bytes(data[5:7], "big")
+                    if self.separate_duration_status and tuple(data[3:5]) == MODE:
+                        from custom_components.aosmith_ble.const import TIMED_MODE_REGISTERS
+
+                        days, mode = data[5:7]
+                        self.registers[MODE] = mode
+                        if mode in TIMED_MODE_REGISTERS:
+                            self.registers[TIMED_MODE_REGISTERS[mode][1]] = days
                 if self.write_then_disconnect:
                     await self.disconnect()
                     raise BleakError("Write outcome unknown")
@@ -237,6 +245,66 @@ async def test_timed_mode_retains_duration_and_uses_single_write(client, periphe
     assert len([p for p in peripheral.writes if p[0] == 0xBD and p[1] == 0x40]) == 1
 
 
+async def test_duration_uses_live_mode_before_mutation(client, peripheral):
+    # HA saw Vacation, but someone changed the heater to Hybrid before the write.
+    with pytest.raises(ProtocolError, match="Mode changed"):
+        await client.set_value(MODE, 0x0702, expected_mode=2)
+    assert not any(p[0] == 0xBD and p[1] == 0x40 for p in peripheral.writes)
+    assert client.diagnostics()["commands"][-1]["outcome"] == "not_sent"
+
+
+@pytest.mark.parametrize("mode,days", [(1, 9), (2, 7), (2, 100), (3, 7)])
+async def test_timed_write_checks_separate_countdown_and_polls_without_diagnostics(
+    client, peripheral, mode, days
+):
+    from custom_components.aosmith_ble.const import TIMED_MODE_REGISTERS
+
+    peripheral.separate_duration_status = True
+    key, register = TIMED_MODE_REGISTERS[mode]
+    peripheral.registers[MODE] = mode
+    peripheral.registers[register] = 0
+    state = await client.set_value(MODE, (days << 8) | mode, expected_mode=mode)
+    assert state.mode == mode and state.mode_days == 0
+    assert state.registers[key] == days
+    assert len([p for p in peripheral.writes if p[0] == 0xBD and p[1] == 0x40]) == 1
+    # Countdown is independent of the originally requested duration.
+    peripheral.registers[register] = 3
+    assert (await client.read_state()).registers[key] == 3
+    assert client.diagnostics()["commands"][-1]["outcome"] == "confirmed"
+
+
+async def test_mode_alone_does_not_confirm_requested_duration(client, peripheral):
+    peripheral.registers[MODE] = 2
+    peripheral.registers[(11, 17)] = 100
+    peripheral.apply_write = False
+    with pytest.raises(ProtocolError, match="did not confirm"):
+        await client.set_value(MODE, 0x0702, expected_mode=2)
+    assert len([p for p in peripheral.writes if p[0] == 0xBD and p[1] == 0x40]) == 1
+    assert client.diagnostics()["commands"][-1]["outcome"] == "unconfirmed"
+
+
+async def test_command_results_survive_poll_traffic_without_pairing_material(client):
+    await client.set_value(MODE, 5)
+    for _ in range(15):
+        await client.read_state()
+    commands = client.diagnostics()["commands"]
+    assert len(commands) == 1 and commands[0]["outcome"] == "confirmed"
+    text = json.dumps(commands)
+    assert IDENTIFIER not in text and "123456" not in text
+
+
+async def test_failed_command_diagnostics_redact_backend_exception(client, peripheral):
+    from unittest.mock import AsyncMock
+
+    client._connector = AsyncMock(side_effect=BleakError("Device AA:BB:CC:DD:EE:FF is unavailable"))
+    with pytest.raises(BleakError):
+        await client.set_value(MODE, 5)
+    command = client.diagnostics()["commands"][-1]
+    assert command["outcome"] == "not_sent"
+    assert command["error"] == "BleakError"
+    assert "AA:BB:CC:DD:EE:FF" not in json.dumps(command)
+
+
 async def test_hot_water_plus_checks_fresh_mode_before_write(client, peripheral):
     from custom_components.aosmith_ble.const import HOT_WATER_PLUS
 
@@ -293,3 +361,48 @@ async def test_temperature_write_rechecks_live_vacation_mode(client, peripheral)
     with pytest.raises(ProtocolError, match="Leave Vacation"):
         await client.set_value(SETPOINT, 0x30E4)
     assert not any(p[1] == 0x40 for p in peripheral.writes if p[0] == 0xBD)
+
+
+@pytest.mark.parametrize("maximum", [125, 140, 150])
+async def test_temperature_write_checks_live_maximum(client, peripheral, maximum):
+    from custom_components.aosmith_ble.const import MAX_SETPOINT, SETPOINT
+    from custom_components.aosmith_ble.protocol import encode_temperature
+
+    peripheral.registers[MAX_SETPOINT] = encode_temperature(maximum)
+    # A stale UI can ask above a newly lowered device limit; no mutation is sent.
+    with pytest.raises(ProtocolError, match="live permitted range"):
+        await client.set_value(SETPOINT, encode_temperature(maximum + 1))
+    assert client.commands[-1]["outcome"] == "not_sent"
+    assert not any(packet[1] == 0x40 for packet in peripheral.writes)
+    state = await client.set_value(SETPOINT, encode_temperature(maximum))
+    assert state.target_temperature == maximum
+    assert client.commands[-1]["outcome"] == "confirmed"
+
+
+@pytest.mark.parametrize("maximum", [None, 0, 0xFFFF])
+async def test_missing_maximum_allows_lowering_but_not_increasing_temperature(client, peripheral, maximum):
+    from custom_components.aosmith_ble.const import MAX_SETPOINT, SETPOINT
+    from custom_components.aosmith_ble.protocol import encode_temperature
+
+    if maximum is not None:
+        peripheral.registers[MAX_SETPOINT] = maximum
+    with pytest.raises(ProtocolError, match="live permitted range"):
+        await client.set_value(SETPOINT, encode_temperature(126))
+    assert not any(packet[1] == 0x40 for packet in peripheral.writes)
+    state = await client.set_value(SETPOINT, encode_temperature(124))
+    assert state.target_temperature == 124
+
+
+@pytest.mark.parametrize("word", [0x00FB, 0xFFFB])
+async def test_unknown_availability_keeps_full_word_without_creating_fault(word):
+    from custom_components.aosmith_ble.protocol import decode_availability
+
+    peripheral = FakePeripheral()
+    peripheral.registers[(27, 23)] = word
+    client = HeaterClient(peripheral.connect, "123456", IDENTIFIER)
+    state = await client.read_state()
+    assert state.availability == 251
+    assert state.availability_word == word
+    assert state.fault == 0
+    assert decode_availability(state.availability, "hps10_observed") is None
+    await client.disconnect()

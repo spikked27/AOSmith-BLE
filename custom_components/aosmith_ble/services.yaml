@@ -1,7 +1,7 @@
 set_timed_mode:
   name: Set timed mode
   description: >-
-    Set Electric for 1–99 days, Vacation for 1–99 days (100 means on until changed),
+    Set Electric for 1–7 days, Vacation for 1–99 days (100 means on until changed),
     or Guest for 1–7 days. Requires device validation on your model.
   fields:
     config_entry_id:

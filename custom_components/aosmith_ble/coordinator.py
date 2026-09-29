@@ -20,8 +20,8 @@ from .const import (
     ENERGY,
     HOT_WATER_PLUS,
     INSPECT_REGISTERS,
+    MAX_SETPOINT,
     NAME,
-    OPTIONAL_REGISTERS,
 )
 from .protocol import ProtocolError
 
@@ -57,10 +57,9 @@ class HeaterCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, entry):
         self.client = make_client(hass, entry.data)
         self.options = dict(entry.options)
-        if entry.options.get("energy_readings", True):
-            self.client.optional_registers["energy_wh"] = ENERGY
-        if entry.options.get("extended_readings", True):
-            self.client.optional_registers.update(OPTIONAL_REGISTERS)
+        # Core controls and readings always request their supporting registers.
+        self.client.optional_registers["maximum_setpoint"] = MAX_SETPOINT
+        self.client.optional_registers["energy_wh"] = ENERGY
         if entry.options.get("enable_hot_water_plus", False):
             self.client.optional_registers["hot_water_plus"] = HOT_WATER_PLUS
         self.address = entry.data[CONF_ADDRESS]
@@ -81,10 +80,10 @@ class HeaterCoordinator(DataUpdateCoordinator):
             except (BleakError, TimeoutError, ProtocolError) as err:
                 raise UpdateFailed(str(err)) from err
 
-    async def async_set_value(self, register, value):
+    async def async_set_value(self, register, value, *, expected_mode=None):
         async with self.command_lock:
             try:
-                state = await self.client.set_value(register, value)
+                state = await self.client.set_value(register, value, expected_mode=expected_mode)
             except (BleakError, TimeoutError, ProtocolError) as err:
                 self.async_set_update_error(UpdateFailed(str(err)))
                 raise HomeAssistantError(str(err)) from err
