@@ -140,3 +140,24 @@ def test_confirmed_grouped_energy_response():
 
     assert read_frame(27, 7, 3).hex().upper() == "BDA0071B0703D8"
     assert read_words(bytes.fromhex("DB020D1B0700000005594480F0"), 27, 7, 3) == (0, 5, 22852)
+
+
+@pytest.mark.parametrize(
+    "frame_hex,expected",
+    [
+        ("DB02091B17000080CA", 50),
+        ("DB02091B17000580AC", 100),
+    ],
+)
+def test_observed_hps10_availability_frames(frame_hex, expected):
+    from custom_components.aosmith_ble.protocol import decode_availability
+
+    raw = read_value(bytes.fromhex(frame_hex), 27, 23)
+    assert decode_availability(raw, "hps10_observed") == expected
+
+
+@pytest.mark.parametrize("raw", [-1, 1, 2, 3, 4, 6, 255, True, None])
+def test_hps10_unobserved_availability_is_unknown(raw):
+    from custom_components.aosmith_ble.protocol import decode_availability
+
+    assert decode_availability(raw, "hps10_observed") is None

@@ -55,12 +55,19 @@ class HeaterSensor(HeaterEntity, SensorEntity):
         if self.key == "target_temperature":
             return None
         if self.key == "availability":
-            return {
+            attributes = {
                 "raw_value": self.coordinator.data.availability,
                 "scale": self.scale,
                 "calibration": "Select the scale in Configure after comparing with iCOMM",
                 "estimated": self.scale == "five_levels",
             }
+            if self.scale == "hps10_observed":
+                attributes.update(
+                    category={0: "Medium", 5: "High"}.get(self.coordinator.data.availability, "Unknown"),
+                    interpretation="Observed HPS10 categories; percentage is not measured tank volume",
+                    calibration="HPS10-80H45DV firmware 6.4; Low code not yet identified",
+                )
+            return attributes
         return None
 
 

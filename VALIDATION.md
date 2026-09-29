@@ -1,7 +1,7 @@
-# Validation of unreleased development 0.3.2.dev1
+# Validation of unreleased development 0.3.2.dev2
 
 September 29, 2026. Python 3.13.15 and Home Assistant 2025.12.5 with its
-Bluetooth/USB dependencies. **115 automated tests pass**, with Ruff lint and
+Bluetooth/USB dependencies. **129 automated tests pass**, with Ruff lint and
 formatting checks passing. One upstream aiohttp/Home Assistant deprecation
 warning remains. Tests use a simulated peripheral, not physical Bluetooth.
 
@@ -15,7 +15,7 @@ warning remains. Tests use a simulated peripheral, not physical Bluetooth.
 | Temperature | Reported limits through 150°F, fresh maximum check before writes, missing/invalid maximum cannot permit an increase; live Vacation write guard |
 | Faults | One Error status binary sensor, low-byte descriptions and raw word, fault 42 clock-not-set, unknown faults retained, unavailable after failed polls |
 | Tariff removal | No HTTP lookup, UI steps, preview or cached plan; upgrade clears obsolete options and retires owned tariff/raw-fault entities without deleting history |
-| Telemetry | Grouped 48-bit energy read, unavailable/error values do not become zero, optional reads back off without dropping core readings; availability conversion remains explicitly unverified |
+| Telemetry | Grouped 48-bit energy read, unavailable/error values do not become zero, optional reads back off without dropping core readings; HPS10 observed High/Medium mapping tested against captured packets; unknown codes remain unknown |
 | Diagnostics/privacy | Pairing material omitted, ordinary traffic bounded, command outcomes retained separately, backend exceptions redacted in command history; removed tariff cache excluded |
 | Packaging | Manifest/version, HACS layout, English strings, action schema, docs and test workflow reviewed |
 
@@ -37,10 +37,9 @@ Model HPS10-80H45DV, reported firmware 6.4:
 
 ## Remaining release acceptance
 
-1. **Availability:** diagnostics during normal shower use, paired with the app's
-   visible bars/category/percentage and approximate time. Ideally capture a
-   changed indication and recovery. No extra water use is needed. Official cloud
-   LOW/MEDIUM/HIGH → 0/50/100 does not establish BLE raw 5's meaning.
+1. **Availability:** High/Medium now have an observed HPS10 mapping from nearby
+   BLE captures and app/official-HA screenshots. Recovery repetition and the Low
+   wire code remain unverified. No additional water use is needed to test Low.
 2. **Duration UI:** one consolidated check of Vacation 7 days → Until changed →
    previous mode; Guest 2 days → previous mode; Electric 2 days → previous mode.
    Compare the physical/app countdown and download diagnostics afterward. These
@@ -65,3 +64,9 @@ makes no guarantee about heater-owned offline TOU schedules.
 
 These changes stay in the development draft PR. Main remains 0.3.1; no final
 release or tag is created before the outstanding evidence is reviewed.
+
+
+September 28 22:23 EDT screenshots show two red app bars and official HA 50%,
+near repeated BLE raw 0 captures. The earlier three-bar/raw 5 observations support
+High/100%. New tests cover both captured frames, unobserved-code handling,
+category attributes and unchanged entity identity. 129 local tests pass.

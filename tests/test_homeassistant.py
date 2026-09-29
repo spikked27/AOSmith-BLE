@@ -619,3 +619,15 @@ def test_inactive_countdown_is_not_presented_as_current(coordinator):
     coordinator.data = HeaterState(50, 2, 5, 0, registers={"vacation_days": 100, "guest_days": 2})
     assert ExtendedSensor(coordinator, "vacation_days").available
     assert not ExtendedSensor(coordinator, "guest_days").available
+
+
+@pytest.mark.parametrize("raw,expected,category", [(0, 50, "Medium"), (5, 100, "High"), (1, None, "Unknown")])
+def test_hps10_category_sensor_preserves_identity_and_uncertainty(coordinator, raw, expected, category):
+    coordinator.options = {"availability_scale": "hps10_observed"}
+    coordinator.data = HeaterState(125, 4, raw, 0)
+    sensor = HeaterSensor(coordinator, "availability")
+    assert sensor.native_value == expected
+    assert sensor.extra_state_attributes["category"] == category
+    assert sensor.extra_state_attributes["raw_value"] == raw
+    assert sensor.unique_id == coordinator.address + "_availability"
+    assert sensor.state_class is None

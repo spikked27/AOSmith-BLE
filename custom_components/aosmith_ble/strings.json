@@ -65,7 +65,7 @@
     "step": {
       "settings": {
         "title": "Controls and readings",
-        "description": "Core controls remain local. Energy is read over Bluetooth. Enable Hot Water Plus only if your heater offers it in iCOMM. Calibrate availability by comparing its raw_value attribute with iCOMM before selecting a scale. Five levels is an estimate, not a verified capacity measurement. Until calibrated, the percentage is unknown.",
+        "description": "Controls and energy readings use Bluetooth. For HPS10-80H45DV firmware 6.4, choose HPS10 observed categories: raw 0 matches Medium (50%) and raw 5 matches High (100%). Other codes remain unknown. These percentages are category labels, not measured tank volume. Other models need comparison with iCOMM before choosing a scale. Enable Hot Water Plus only if your heater offers it.",
         "data": {
           "poll_interval": "Polling interval (seconds)",
           "enable_setpoint_writes": "Enable temperature controls (up to heater's permitted maximum)",

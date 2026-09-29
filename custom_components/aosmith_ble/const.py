@@ -20,9 +20,10 @@ MIN_TEMP_F = 95
 MAX_TEMP_F = 150
 DEFAULT_MAX_TEMP_F = 140
 
-VERSION = "0.3.2.dev1"
+VERSION = "0.3.2.dev2"
 AVAILABILITY_SCALES = {
     "unverified": "Not calibrated",
+    "hps10_observed": "HPS10 observed categories (0 = 50%, 5 = 100%)",
     "five_levels": "0–5 levels (estimated 20% steps)",
     "percent_remaining": "0–100 percent remaining",
     "percent_used": "0–100 percent used (inverted)",

@@ -157,3 +157,28 @@ LOW → 0%, MEDIUM → 50%, HIGH → 100%; numeric API values → 100 minus valu
 The APK's BLE WATER_AVAILABLE parser returns the low byte without that conversion.
 Therefore raw 5 cannot yet be labeled High/100% from official-integration code.
 A paired shower-time raw reading and app indication remains the next evidence.
+
+
+## Paired availability observations — 0.3.2.dev2
+
+The owner supplied current iCOMM and official HA screenshots at 22:23 EDT on
+September 28. iCOMM showed two red arc segments and one blue segment; the official
+HA availability sensor showed 50%, updated 14 seconds earlier. The most recent
+BLE diagnostic at 22:19:49 contained raw 0, also observed at 22:00, 22:08 and 22:14,
+with valid responses and fault 0. These are close-time observations, not an atomic
+cross-transport capture. Earlier three-red-bar app imagery at 21:18 was near raw
+5 captures at 21:24/21:27. Together they support this explicit HPS10-80H45DV / 6.4
+option: raw 0 → Medium/50%, raw 5 → High/100%.
+
+The normal five-level arithmetic would incorrectly show 0% for the observed
+Medium condition. A new `hps10_observed` scale uses only the two observed codes;
+all others return unknown. It is opt-in because the integration does not identify
+model/firmware automatically and other iCOMM devices may differ. Existing scales
+remain unchanged. The category attribute clarifies that 50% is a status label,
+not a measured tank-volume fraction. A future recovery/Low observation can refine
+or disprove this mapping; Low is a valid cloud category, not inherently an error.
+
+Energy progressed from 350.532 to 350.646 kWh across the captures; this supports
+counter progression but does not independently calibrate its accuracy. No new
+finite-duration or development-upgrade validation was supplied: the diagnostics
+still identify installed version 0.3.1. The new code passes 129 local tests.

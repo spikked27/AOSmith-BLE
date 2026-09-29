@@ -14,7 +14,7 @@ heat pumps, electric, gas, tankless and recirculation products with other maps.
 | Advanced load-up flag | Removed from product scope | No utility writes exposed |
 | Utility enrollment device flag | Removed from product scope | No account enrollment |
 | Remaining days | Optional diagnostic sensors | Firmware-specific sentinels and availability |
-| Hot-water availability | Percent entity with explicit calibration; raw attribute retained | Verify the scale against iCOMM at more than one level |
+| Hot-water availability | Explicit HPS10 observed categories: raw 0 → 50%, raw 5 → 100%; raw attribute retained | Low code, recovery confirmation and other models |
 | Fault status | One Error status problem entity with readable current fault, including clock code 42 | Additional model/firmware validation |
 | Energy use and history | Local cumulative kWh sensor | Heating-cycle delta, reset behavior and other models |
 | Actual tank temperature / running components | No confirmed local mapping | Telemetry source and units |
@@ -31,8 +31,8 @@ heat pumps, electric, gas, tankless and recirculation products with other maps.
    clock captures have already been collected; repeating those is not a next step.
 2. Test one-day Vacation then return to the previous mode; compare countdown.
 3. Test Guest duration and restore. Test boost only on a model that offers it.
-4. Compare raw availability with the app’s bars/category during a normal shower.
-   The official cloud LOW/MEDIUM/HIGH mapping does not identify BLE raw values.
+4. During normal use/recovery, note any new availability code and matching app
+   category. High/Medium have an observed HPS10 mapping; Low is not yet identified.
 
 A passing simulated peripheral test checks our encoding and recovery; it does
 not prove that an optional feature exists on a particular heater. Contributions

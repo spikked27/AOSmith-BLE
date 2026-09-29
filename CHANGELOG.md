@@ -1,4 +1,4 @@
-# Unreleased — 0.3.2.dev1
+# Unreleased — 0.3.2.dev2
 
 - Add device-page Mode duration for Vacation, Guest and Electric, with explicit
   Until changed options and mode-specific limits. Display the active countdown.
@@ -26,8 +26,12 @@
   initial refresh; hide retained countdown readings outside their active mode.
 - Recheck live temperature maximum before writes. Missing/invalid maximum data
   never authorizes a higher setting; polling failures do not show a healthy fault state.
-- Pass 115 software tests and Ruff checks. Await shower availability evidence and
+- Pass 129 software tests and Ruff checks. Await remaining availability evidence and
   physical duration checks before calling the development work a final release.
+- Add an opt-in HPS10 observed availability mapping: raw 0 → Medium/50%, raw 5 →
+  High/100%, all other codes unknown. Preserve raw readings and entity identity;
+  document that percentages are category labels and not measured tank volume.
+- Add captured-frame and unknown-code tests; 129 local tests pass.
 
 # 0.3.1 — availability calibration and recovery fixes
 

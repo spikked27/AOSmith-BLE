@@ -109,6 +109,10 @@ def decode_availability(raw: int, scale: str) -> int | None:
     """Apply only the explicitly selected scale; never infer one from a single byte."""
     if type(raw) is not int:
         return None
+    if scale == "hps10_observed":
+        # HPS10-80H45DV / firmware 6.4 observations, not a universal enum.
+        # The Low category's wire value has not been observed; do not guess it.
+        return {0: 50, 5: 100}.get(raw)
     if scale == "five_levels" and 0 <= raw <= 5:
         return raw * 20
     if 0 <= raw <= 100:

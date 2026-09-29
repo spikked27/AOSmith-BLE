@@ -1,4 +1,4 @@
-# AO Smith Local BLE — development 0.3.2.dev1
+# AO Smith Local BLE — development 0.3.2.dev2
 
 Local Bluetooth integration for Home Assistant. No AO Smith account, password,
 or Internet is needed for heater control. Utility tariffs must be configured in
@@ -193,16 +193,24 @@ Use **Configure → Hot-water availability scale**:
 | Selection | Mapping | Raw 5 displays |
 |---|---|---|
 | Not calibrated (default) | No assumed conversion | Unknown; raw_value remains 5 |
-| 0–5 levels | Estimated 20% per level | 100% |
+| HPS10 observed categories | Raw 0 → Medium/50%; raw 5 → High/100%; others unknown | 100% |
+| 0–5 levels | Estimated 20% per level; not appropriate for the observed HPS10 codes | 100% |
 | 0–100 percent remaining | Direct percentage | 5% |
 | 0–100 percent used | Invert the percentage | 95% |
 
-Choose a scale only after comparing with iCOMM, preferably both before and after
-normal hot-water use. The APK exposes the BLE low byte without a percentage
-conversion. The cloud client instead inverts its numeric API field, so a cloud
-mapping cannot be blindly applied to BLE. Five-level conversion is provisional,
-not a measurement of gallons or tank temperature. Values outside the selected
-scale become unknown rather than being clamped to a misleading 0% or 100%.
+For HPS10-80H45DV firmware 6.4, select **HPS10 observed categories**. Captures
+on September 28, 2026 showed raw 5 near a three-red-bar app reading; later raw 0
+readings were followed by a two-red-bar app screenshot and 50% in the official
+HA integration. This is an observed model-specific mapping, not a universal BLE
+enumeration. The Low category's raw code remains unknown. Unknown codes stay
+unknown; they are not converted to 0% or marked as faults.
+
+The percentage is a category label, not a measurement of remaining gallons.
+The official cloud library maps LOW/MEDIUM/HIGH to 0/50/100; its numeric cloud
+field uses a different conversion. Neither supplies a universal BLE conversion.
+For other models, leave Not calibrated until readings have been compared with
+iCOMM. Existing explicit calibration choices are preserved on upgrade; switch
+an earlier five-level selection to the HPS10 option on this tested model.
 No cross-calibration long-term statistics are generated for this sensor.
 
 ## Temperature panel

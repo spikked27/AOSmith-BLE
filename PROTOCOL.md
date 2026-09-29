@@ -169,3 +169,13 @@ Temperature writes re-read 1:43 under the request lock, after checking live mode
 A rejected/missing maximum permits no increase over the present setting and is
 capped at 140°F; a valid reported maximum permits up to 150°F. Other read errors
 stop the write. Confirmation still requires a subsequent setpoint readback.
+
+
+## Observed HPS10 availability categories
+
+The opt-in `hps10_observed` scale maps raw 0 to Medium/50% and raw 5 to High/100%.
+Captured frames `DB02091B17000080CA` and `DB02091B17000580AC` validate decoding;
+the semantic association comes from nearby owner app/official-HA screenshots,
+not from an APK-defined BLE enum. All other values remain unknown. See
+RESEARCH.md for timestamps and model/firmware scope. Never treat every unknown
+code as Low, nor treat Low as a heater fault.
