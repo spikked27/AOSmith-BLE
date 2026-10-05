@@ -3,7 +3,7 @@
 from homeassistant.components.select import SelectEntity
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DOMAIN, HOT_WATER_PLUS, MODE, MODE_NAMES
+from .const import CONF_ENERGY_PREFERENCE, DOMAIN, ENERGY_PREFERENCES, HOT_WATER_PLUS, MODE, MODE_NAMES
 from .entity import HeaterEntity
 from .protocol import encode_timed_mode
 
@@ -13,7 +13,36 @@ async def async_setup_entry(hass, entry, async_add_entities):
     entities = [VacationGuestDuration(coordinator)]
     if entry.options.get("enable_hot_water_plus", False):
         entities.append(HotWaterPlus(coordinator))
+    if entry.options.get(CONF_ENERGY_PREFERENCE, False):
+        entities.append(ExperimentalEnergyPreference(coordinator))
     async_add_entities(entities)
+
+
+class ExperimentalEnergyPreference(HeaterEntity, SelectEntity):
+    """App-derived candidate, explicitly not a verified behavioral control."""
+
+    _attr_name = "Energy preference (experimental)"
+    _attr_icon = "mdi:water-boiler"
+    _attr_options = list(ENERGY_PREFERENCES)
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "energy_preference_experimental")
+
+    @property
+    def current_option(self):
+        raw = self.coordinator.data.registers.get("energy_preference_experimental")
+        return next((name for name, value in ENERGY_PREFERENCES.items() if value == raw), None)
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "behavior_verified": False,
+            "schedule_rebuilt": False,
+            "original_value": (self.coordinator.preference_backup or {}).get("value"),
+        }
+
+    async def async_select_option(self, option):
+        await self.coordinator.async_test_energy_preference(option)
 
 
 class VacationGuestDuration(HeaterEntity, SelectEntity):

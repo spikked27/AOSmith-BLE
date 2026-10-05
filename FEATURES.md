@@ -39,6 +39,8 @@ not prove that an optional feature exists on a particular heater. Contributions
 should include model, firmware, redacted captures and expected physical behavior.
 Never submit a pairing identifier, PIN, APK, account token or Wi-Fi credentials.
 
-Energy usage preference control remains pending: iCOMM's next-generation BLE
-and Wi-Fi paths disagree on its address. Manual Inspect captures both candidates
-in 1.1.2; no preference or tariff writes are exposed. See RESEARCH.md.
+Energy usage preference now has an opt-in experimental dropdown and restore
+button. It tests only the app's BLE candidate with persistent original-value
+backup and readback. Hardware meaning, effect on recovery, and whether schedule
+regeneration is required remain unverified. No schedule or clock writer is
+exposed. See RESEARCH.md and README.md.

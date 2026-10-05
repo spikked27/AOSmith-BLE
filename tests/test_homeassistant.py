@@ -239,6 +239,7 @@ async def test_core_energy_read_is_always_enabled(tmp_path):
     hass = HomeAssistant(str(tmp_path))
     client = SimpleNamespace(optional_registers={})
     entry = SimpleNamespace(
+        entry_id="test",
         data={"address": "AA:BB:CC:DD:EE:FF"},
         options={"extended_readings": False, "energy_readings": False},
         pref_disable_polling=False,
@@ -569,7 +570,11 @@ async def test_tariff_removed_from_options_and_entity_setup(tmp_path, coordinato
         assert form["type"] == "form" and form["step_id"] == "settings"
         result = await flow.async_step_settings({"poll_interval": 60})
         assert result["data"] == clean_options({"poll_interval": 60})
-        assert len(form["data_schema"].schema) == 2
+        assert {str(key) for key in form["data_schema"].schema} == {
+            "poll_interval",
+            "enable_hot_water_plus",
+            "enable_experimental_energy_preference",
+        }
     await hass.async_stop()
 
 
@@ -731,4 +736,67 @@ async def test_debug_default_migration_runs_once_and_preserves_pairing(tmp_path)
         assert await async_migrate_entry(hass, entry)
         registry.async_update_entity.assert_not_called()
     assert entry.data == credentials
+    await hass.async_stop()
+
+
+async def test_experimental_preference_opt_in_entities(coordinator):
+    from custom_components.aosmith_ble import button, select
+    from custom_components.aosmith_ble.const import CONF_ENERGY_PREFERENCE
+
+    hass = SimpleNamespace(data={DOMAIN: {"test": coordinator}})
+    entry = SimpleNamespace(entry_id="test", options={CONF_ENERGY_PREFERENCE: True})
+    coordinator.preference_backup = {"register": [28, 113], "value": 2}
+    coordinator.async_test_energy_preference = AsyncMock()
+    coordinator.data = HeaterState(125, 4, 5, 0, registers={"energy_preference_experimental": 1})
+    entities = []
+    await select.async_setup_entry(hass, entry, entities.extend)
+    control = next(e for e in entities if isinstance(e, select.ExperimentalEnergyPreference))
+    assert control.current_option == "More Hot Water"
+    assert control.extra_state_attributes["behavior_verified"] is False
+    await control.async_select_option("More Savings")
+    coordinator.async_test_energy_preference.assert_awaited_once_with("More Savings")
+    entities = []
+    await button.async_setup_entry(hass, entry, entities.extend)
+    restore = next(e for e in entities if isinstance(e, button.RestoreEnergyPreference))
+    assert restore.available
+    await restore.async_press()
+    coordinator.async_test_energy_preference.assert_awaited_with(restore=True)
+
+
+async def test_preference_backup_survives_coordinator_restart(tmp_path):
+    from custom_components.aosmith_ble.const import CONF_ENERGY_PREFERENCE
+    from custom_components.aosmith_ble.coordinator import HeaterCoordinator
+
+    hass = HomeAssistant(str(tmp_path))
+    entry = SimpleNamespace(
+        entry_id="preference_test",
+        data={"address": "AA:BB:CC:DD:EE:FF"},
+        options={CONF_ENERGY_PREFERENCE: True},
+        pref_disable_polling=False,
+        async_on_unload=MagicMock(),
+    )
+    calls = []
+
+    async def change(value, save_original, *, restoring=False):
+        await save_original(2 if not calls else 1)
+        calls.append((value, restoring))
+        return {"outcome": "readback_confirmed"}
+
+    client = SimpleNamespace(optional_registers={}, test_energy_preference=change)
+    with patch("custom_components.aosmith_ble.coordinator.make_client", return_value=client):
+        first = HeaterCoordinator(hass, entry)
+        first.async_request_refresh = AsyncMock()
+        await first.async_test_energy_preference("More Hot Water")
+        assert first.preference_backup == {"register": [28, 113], "value": 2}
+        await first.async_test_energy_preference("More Savings")
+        assert first.preference_backup["value"] == 2
+        restarted = HeaterCoordinator(hass, entry)
+        restarted.async_request_refresh = AsyncMock()
+        await restarted.async_test_energy_preference(restore=True)
+        assert calls == [(1, False), (0, False), (2, True)]
+        assert restarted.preference_backup["value"] == 2
+        restarted.options[CONF_ENERGY_PREFERENCE] = False
+        with pytest.raises(HomeAssistantError, match="Enable"):
+            await restarted.async_test_energy_preference("More Hot Water")
+        assert len(calls) == 3
     await hass.async_stop()

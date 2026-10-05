@@ -85,7 +85,7 @@ Optional polls never replace a missing value with zero. Unknown-register status
 and defer the failed register for ten minutes. Core readings already obtained
 remain usable. Writes still require exact full-word readback and are never replayed.
 
-## Schedule and tariff research (no writes exposed)
+## Schedule and tariff research (no schedule writes exposed)
 
 The APK has local season writers for blocks 21–25 (functions 14724–14749).
 The serializer `seasonToHex` emits four date bytes then twenty six-byte event
@@ -201,3 +201,14 @@ WATER_AVAILABLE path selects the low byte without signed conversion. A signed
 251 after the app's low-byte extraction. Neither has an established Low meaning.
 The full raw word is now retained as `state.availability_word` in diagnostics.
 No unknown availability code is converted to an error or guessed percentage.
+
+## Experimental preference write (1.2.0)
+
+The explicit opt-in test uses 28:113 (0x1C:0x71), matching the BLE
+`sendHolidays → formatExtraData → createHolidayFrames` path. Mapping:
+More Hot Water = 1, More Savings = 0, Most Savings = 2. The generic setting-write
+allowlist is unchanged; a dedicated method permits only this address and enum.
+It reads the original word, waits for a durable backup, sends one write, and
+checks up to three readbacks. Same-value requests send no write. It never tries
+28:75 or legacy 27:113 as a fallback. This does not demonstrate that firmware
+applies the preference or recalculates its already-uploaded schedule.

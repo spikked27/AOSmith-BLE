@@ -24,5 +24,6 @@ async def async_get_config_entry_diagnostics(hass, entry):
         "last_update_success": coordinator.last_update_success if coordinator else None,
         "state": asdict(coordinator.data) if coordinator and coordinator.data else None,
         "transport": coordinator.client.diagnostics() if coordinator else None,
+        "energy_preference_original": getattr(coordinator, "preference_backup", None),
         "redacted": ["address", "name", "pin", "pairing_identifier", "challenge", "auth_digest"],
     }
