@@ -11,6 +11,7 @@ from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import callback
 
 from .const import (
+    CONF_ENERGY_PREFERENCE,
     CONF_IDENTIFIER,
     CONF_INTERVAL,
     CONF_PIN,
@@ -232,6 +233,10 @@ class OptionsFlow(config_entries.OptionsFlow):
                     vol.Required(
                         "enable_hot_water_plus",
                         default=self.config_entry.options.get("enable_hot_water_plus", False),
+                    ): bool,
+                    vol.Required(
+                        CONF_ENERGY_PREFERENCE,
+                        default=self.config_entry.options.get(CONF_ENERGY_PREFERENCE, False),
                     ): bool,
                 }
             ),

@@ -65,10 +65,11 @@
     "step": {
       "settings": {
         "title": "Controls and readings",
-        "description": "Local Bluetooth settings. Temperature controls and energy readings are always enabled. Hot-water availability uses the tested HPS10 categories automatically. Enable Hot Water Plus only if your heater offers it.",
+        "description": "Local Bluetooth settings. Temperature controls and energy readings are always enabled. Hot-water availability uses the tested HPS10 categories automatically. Enable Hot Water Plus only if your heater offers it. Experimental energy preference saves the original setting and verifies readback. Its effect on heating is unverified; it does not rebuild your rate schedule.",
         "data": {
           "poll_interval": "Polling interval (seconds)",
-          "enable_hot_water_plus": "Enable Hot Water Plus (supported models only)"
+          "enable_hot_water_plus": "Enable Hot Water Plus (supported models only)",
+          "enable_experimental_energy_preference": "Enable experimental energy preference control"
         }
       }
     }
@@ -76,7 +77,7 @@
   "services": {
     "set_timed_mode": {
       "name": "Set timed mode",
-      "description": "Enter a mode and duration together: Electric 1–7 days, Vacation 1–99 days (100 means until changed), or Guest 1–7 days. Finite countdowns are APK-derived and not yet verified on hardware.",
+      "description": "Enter a mode and duration together: Electric 1\u20137 days, Vacation 1\u201399 days (100 means until changed), or Guest 1\u20137 days. Finite countdowns are APK-derived and not yet verified on hardware.",
       "fields": {
         "config_entry_id": {
           "name": "Water heater",

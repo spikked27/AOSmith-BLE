@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+from unittest.mock import AsyncMock
 
 import pytest
 from bleak.exc import BleakError
@@ -144,6 +145,70 @@ async def test_expired_session_reauthenticates_once(client, peripheral):
     assert (await client.read_state()).mode == 4
     assert client.authentications == 2
     assert not any(p[1] in (0xF0, 0xF3) for p in peripheral.writes if p[0] == 0xBD)
+
+
+@pytest.mark.parametrize("word", [0, 1, 2])
+async def test_energy_preference_one_write_after_backup(client, peripheral, word):
+    from custom_components.aosmith_ble.const import ENERGY_PREFERENCE
+
+    peripheral.registers[ENERGY_PREFERENCE] = (word + 1) % 3
+    before = peripheral.registers[ENERGY_PREFERENCE]
+
+    async def save(value):
+        assert value == before
+        assert not any(p[:2] == b"\xbd\x40" for p in peripheral.writes)
+
+    result = await client.test_energy_preference(word, save)
+    writes = [p for p in peripheral.writes if p[:2] == b"\xbd\x40"]
+    assert len(writes) == 1
+    assert writes[0][3:7] == bytes([28, 113, 0, word])
+    assert result["outcome"] == "readback_confirmed"
+    assert result["before"] == before and result["after"] == word
+    assert result["behavior_verified"] is False
+    assert peripheral.registers[(11, 0)] == 0x33AB
+    assert peripheral.registers[(11, 15)] == 4
+
+
+async def test_energy_preference_failed_persistence_prevents_write(client, peripheral):
+    peripheral.registers[(28, 113)] = 2
+    save = AsyncMock(side_effect=OSError("Storage unavailable"))
+    with pytest.raises(OSError):
+        await client.test_energy_preference(1, save)
+    assert not any(p[:2] == b"\xbd\x40" for p in peripheral.writes)
+    assert client.commands[-1]["outcome"] == "not_sent"
+
+
+@pytest.mark.parametrize("existing", [None, 0xFFFF, 3])
+async def test_energy_preference_unreadable_or_invalid_candidate_never_falls_back(
+    client, peripheral, existing
+):
+    if existing is not None:
+        peripheral.registers[(28, 113)] = existing
+    peripheral.registers[(28, 75)] = 2
+    with pytest.raises(ProtocolError):
+        await client.test_energy_preference(1, AsyncMock())
+    assert not any(p[:2] == b"\xbd\x40" for p in peripheral.writes)
+    assert not any(p[:2] == b"\xbd\xa0" and p[3:5] == bytes([28, 75]) for p in peripheral.writes)
+
+
+@pytest.mark.parametrize("failure", ["disconnect", "mismatch"])
+async def test_energy_preference_ambiguous_or_mismatched_write_is_not_retried(client, peripheral, failure):
+    peripheral.registers[(28, 113)] = 2
+    peripheral.write_then_disconnect = failure == "disconnect"
+    peripheral.apply_write = failure != "mismatch"
+    save = AsyncMock()
+    with pytest.raises((BleakError, ProtocolError)):
+        await client.test_energy_preference(1, save)
+    save.assert_awaited_once_with(2)
+    assert len([p for p in peripheral.writes if p[:2] == b"\xbd\x40"]) == 1
+    assert client.commands[-1]["outcome"] == "unconfirmed"
+
+
+async def test_energy_preference_already_matches_does_not_write(client, peripheral):
+    peripheral.registers[(28, 113)] = 1
+    result = await client.test_energy_preference(1, AsyncMock())
+    assert result["outcome"] == "already_matches"
+    assert not any(p[:2] == b"\xbd\x40" for p in peripheral.writes)
 
 
 async def test_disconnect_read_retries_and_reauthenticates(client, peripheral):

@@ -19,7 +19,10 @@ FAULT = (2, 7)
 MIN_TEMP_F = 95
 MAX_TEMP_F = 150
 
-VERSION = "1.1.2"
+VERSION = "1.2.0"
+CONF_ENERGY_PREFERENCE = "enable_experimental_energy_preference"
+ENERGY_PREFERENCE = (28, 113)
+ENERGY_PREFERENCES = {"More Hot Water": 1, "More Savings": 0, "Most Savings": 2}
 DEFAULT_MODE_DAYS = {2: 7, 3: 1}
 
 
@@ -28,6 +31,7 @@ def clean_options(options):
     return {
         CONF_INTERVAL: options.get(CONF_INTERVAL, DEFAULT_INTERVAL),
         "enable_hot_water_plus": options.get("enable_hot_water_plus", False),
+        CONF_ENERGY_PREFERENCE: options.get(CONF_ENERGY_PREFERENCE, False),
     }
 
 
@@ -55,8 +59,8 @@ OPTIONAL_REGISTERS = {
     "electric_days": ELECTRIC_DAYS,
 }
 # Read-only capture; grid energy units and clock mapping remain unverified.
-# APK TOU paths disagree on the next-generation preference offset. Inspect only;
-# neither a matching numeric value nor successful read proves the register meaning.
+# APK TOU paths disagree on the next-generation preference offset. The explicit
+# experimental control uses only the BLE path; neither value proves the meaning.
 ENERGY_PREFERENCE_CANDIDATES = {
     "energy_preference_candidate_contiguous": (28, 75),
     "energy_preference_candidate_ble": (28, 113),

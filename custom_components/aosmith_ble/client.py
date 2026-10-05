@@ -13,6 +13,8 @@ from bleak.exc import BleakError
 
 from .const import (
     AVAILABILITY,
+    ENERGY_PREFERENCE,
+    ENERGY_PREFERENCES,
     FAULT,
     HOT_WATER_PLUS,
     MAX_TEMP_F,
@@ -327,6 +329,58 @@ class HeaterClient:
                     await self._close()
                     raise
         raise ProtocolError("No state received")
+
+    async def test_energy_preference(self, value: int, save_original, *, restoring=False):
+        """Try only the app's BLE candidate; one write, never automatic fallback.
+
+        save_original is awaited before transmission so the pre-test value is
+        durable even after a restart or an ambiguous write result. Readback is
+        evidence of stored bytes, not evidence of schedule/controller behavior.
+        """
+        if type(value) is not int or value not in ENERGY_PREFERENCES.values():
+            raise ValueError("Invalid energy preference word")
+        async with self._lock:
+            command = {
+                "time": datetime.now(timezone.utc).isoformat(),
+                "register": list(ENERGY_PREFERENCE),
+                "value": value,
+                "experimental": True,
+                "restoring": restoring,
+                "outcome": "not_sent",
+                "behavior_verified": False,
+            }
+            self.commands.append(command)
+            try:
+                await self._ensure_session()
+                before = await self._read(ENERGY_PREFERENCE)
+                command["before"] = before
+                if before not in ENERGY_PREFERENCES.values():
+                    raise ProtocolError("Candidate returned an unexpected word; no write sent")
+                await save_original(before)
+                if before == value:
+                    command["outcome"] = "already_matches"
+                    command["after"] = before
+                    return dict(command)
+                await asyncio.sleep(self._spacing)
+                packet = write_frame(*ENERGY_PREFERENCE, value)
+                command["outcome"] = "unconfirmed"
+                self._record("tx", frame=packet.hex().upper())
+                async with asyncio.timeout(self._timeout):
+                    await self._client.write_gatt_char(WRITE_UUID, packet, response=True)
+                for _ in range(3):
+                    actual = await self._read(ENERGY_PREFERENCE)
+                    command["after"] = actual
+                    if actual == value:
+                        command["outcome"] = "readback_confirmed"
+                        return dict(command)
+                raise ProtocolError("Preference readback did not match; write was not repeated")
+            except (BleakError, TimeoutError, ProtocolError) as err:
+                command["error"] = str(err) if isinstance(err, ProtocolError) else type(err).__name__
+                await self._close()
+                raise
+            except BaseException:
+                await self._close()
+                raise
 
     async def set_value(self, register, value: int, *, expected_mode=None) -> HeaterState:
         async with self._lock:

@@ -298,3 +298,109 @@ would identify the storage candidate; a narrowly scoped BLE write with readback
 and official-app verification must then establish whether preference-only
 updates take effect without the app's full tariff re-upload/activation sequence.
 No tariff, holiday, threshold, clock or enrollment writes are introduced.
+
+## Follow-up: BLE preference experiment and clock trace — October 5, 2026
+
+### What the app saves together
+
+Following the actual EnergyUsePrefs Bluetooth save handler (#21288 in the
+full decompiled listing) adds a key detail missing from the earlier register
+comparison: the app first converts slider 0/0.5/1 to schedule preference 1/2/3
+(module 2002), calls `timeOfUseToHex`, and only then calls `sendTOU` with the
+original slider selection. `timeOfUseToHex` (#14497) calls `jsonToHex` (#14507),
+which calls `makeEventsList` (#14517). Its map callback #14520 passes that
+preference into `getDRn` (#14539) and writes the result into each event's `mode`.
+
+These 1/2/3 values are therefore also schedule-generation inputs, not merely a
+cloud enum. They must not be confused with module 1417's separate 1/0/2
+serialized preference word. At the highest-priced period of a season whose
+maximum/minimum price ratio exceeds 1.2, the generator produces mode 6, 7 or 8
+for More Hot Water, More Savings or Most Savings respectively. The exact
+controller response to each event code remains firmware behavior, not recovered
+from this application. A lower price ratio caps the demand-response level.
+
+The generator stores calendar start dates, day-of-week masks, hour/minute,
+mode and modeData in season blocks 21–25 (0x15–0x19). It can insert mode-9
+load-up events three hours before higher-priced periods when its base-price
+check permits. These are *scheduled event times*, not the current clock time.
+`sendTOU` #13465 sends holiday/preference data and then the season data; no
+current date/time write appears in this sequence. The season writer ends each
+block with a read of parameter 0x3E, not a timestamp write.
+
+Thus the evidence-based model is: the app calculates and uploads calendar
+instructions; the controller uses its own clock to execute them. The app does
+not need to remain connected at every tariff boundary. The application's
+ability to construct a schedule does not prove firmware activation or validate
+clock accuracy. Changing the separate preference word alone might not rebuild
+those stored modes; that is explicitly an experiment in version 1.2.0.
+
+### Chosen first experiment
+
+The user authorized a best-guess preference trial. The implementation uses the
+Bluetooth path's 28:113 address, rather than automatically trying both candidates.
+It requires a readable word in 0/1/2, saves and verifies the original value on
+disk, sends one write, and checks readback. The restore control retains the first
+backup across restarts. There is no automatic rollback after an ambiguous write,
+no alternate-address fallback, and no claim that readback proves heating effects.
+If this candidate is rejected, the result is useful evidence about the app's
+apparent map inconsistency; it does not authorize silently selecting a new map.
+
+### Clock: confirmed bytes and unresolved next-generation path
+
+The only explicit heater clock constructor located in iCOMM 14.1.0 remains
+`setClock` #14611. Its serializers #14678/#14679 take the phone's **local** date
+and time using getMinutes/getHours/getDate/getMonth/getFullYear:
+
+- Destination: block 26, starting parameter 3 (0x1A:0x03), two adjacent words.
+- Payload order: minute byte, hour byte, then the two-byte packed calendar date.
+- Packed date: `(year % 100) << 9 | month << 5 | day` (month 1–12).
+- Example for 2026-10-05 18:53 local: payload `35 12 35 45`.
+- No seconds, timezone identifier, UTC offset, or DST rule is serialized here.
+
+The constructor assembles one multiword BD40 frame. This is a known *legacy*
+command format, not an HPS10 command recommendation. Rechecked authoritative
+Hermes bytecode #13456 offset 0xA6: it jumps past `setEssentialParams` unless the
+profile is exactly `HEAT_PUMP`. #13493 calls remote-enable followed by `setClock`.
+The profile reference is supplied by the connection callers; NEXT_GEN_HEAT_PUMP
+is a distinct enum and is also used to select the newer temperature/mode map.
+No next-generation replacement clock write was found in module 1422.
+
+The follow-up also searched the full JS listing for Date/time/epoch/timezone
+conversion paths and examined method identifiers in all six DEX files. The
+AO Smith native classes were React Native application/activity/resources;
+Bluetooth writes route through the BLE-PLX bridge. Identified native clock
+methods belonged to Android/UI/libraries or Google's scheduler, not an AO Smith
+clock API. No literal standard Current Time Service/characteristic UUID
+(0x1805/0x2A2B) was found. This negative search is not proof that firmware exposes
+no clock, or that another installed/updated app build behaves identically.
+
+The manufacturer's current heat-pump Use & Care Guide 100379654 (March 2025),
+printed pages 25 and 27, explicitly discusses setting time after disconnected
+control/power conditions and documents battery-low code 048 with a replaceable
+controller battery. The broader service handbook 2000620230, printed page 17,
+contains the same battery/time note. This is family-level evidence of retained
+time and Wi-Fi/Bluetooth association with setting time; it supplies no register
+mapping or documented drift/DST resynchronization interval for the HPS10.
+Sources:
+https://assets.hotwater.com/damroot/Original/10009/100379654.pdf
+https://assets.hotwater.com/damroot/Original/10017/2000620230.pdf
+
+Consequences: Bluetooth time setting is a credible capability, and an internal
+clock can continue running without the phone. It does not follow that every
+connection synchronizes time, nor that the exposed legacy address is shared by
+the HPS10. The owner's all-zero 26:3/4 reads do not identify a running RTC. The
+remaining discriminating evidence is the official app's actual transmitted
+frames during a Bluetooth-only reconnect and tariff save on this hardware,
+including a phone-local time reference. HA's own traffic log does not capture
+another central device's writes. No next-generation clock write or automatic
+clock synchronization is added in this release.
+
+### Capture-version correction
+
+The owner's October 5 diagnostic files ending 14 and 19 list downloaded custom
+component 1.1.2, but both running diagnostics and the loaded manifest say 1.1.1.
+Neither includes preference-candidate entries or corresponding transmitted read
+frames. File 14 also contains an old September 29 extended snapshot, while file
+19's snapshot stopped after a timeout. These are not evidence of unchanged
+preference candidates. A full HA restart is needed to load and verify the new
+runtime before the experimental test.

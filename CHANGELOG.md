@@ -1,3 +1,15 @@
+# 1.2.0 — October 5, 2026
+
+- Add opt-in experimental energy-preference dropdown using the app BLE address
+  28:113, with a persistent pre-test backup and Restore button.
+- Verify the backup on disk before writing; send at most one write and require
+  matching readback. No automatic address fallback or write retry.
+- Record raw before/after results and distinguish stored-word confirmation from
+  unverified heating behavior. Keep schedule/clock programming out of this test.
+- Trace preference-dependent schedule generation and repeat the clock review,
+  including the legacy profile guard, native DEX tables and battery-backed clock
+  evidence. Next-generation clock synchronization remains unresolved.
+
 # 1.1.2 — October 5, 2026
 
 - Add two read-only energy-preference candidates to the existing manual Inspect

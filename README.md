@@ -20,8 +20,8 @@ different protocols. This project is independent of A. O. Smith.
 | Error status | Indicates a reported heater fault and provides its description and code |
 
 Hot Water Plus can be enabled for models that support it. Diagnostic buttons are
-available when needed and disabled by default. No tariff or demand-response
-controls are included.
+available when needed and disabled by default. An experimental energy-preference control is opt-in. Tariff lookup and schedule
+programming are not included.
 
 ## Requirements
 
@@ -149,32 +149,38 @@ require cloud access; keeping a utility plan current may require reconnecting
 through the official app. We have not verified whether iCOMM refreshes existing
 plans automatically or requires reapplying them.
 
-### Energy usage preferences
+### Energy usage preferences (experimental)
 
-The iCOMM choices **More Hot Water**, **More Savings**, and **Most Savings**
-control how the heater uses energy across an existing rate plan. They are
-separate from Hybrid/Heat pump/Electric operating modes. The app warns that
-Most Savings may leave insufficient hot water.
+Version 1.2.0 adds an opt-in **Energy preference (experimental)** dropdown:
+More Hot Water, More Savings, and Most Savings. It uses the address constructed
+by iCOMM 14.1.0's BLE upload for next-generation heaters, 0x1C:0x71. The firmware
+meaning and effect on heating remain unverified. A separate Wi-Fi path places
+the preference at 0x1C:0x4B; this integration does not automatically try it.
 
-Preference control is **not yet available in this integration**: the APK uses
-conflicting register addresses for newer heaters. Version 1.1.2 adds a targeted
-read-only capture to the existing **Inspect extended registers** button to
-resolve this. To contribute a comparison:
+1. Update to 1.2.0 and **restart Home Assistant**. Downloaded and running versions
+   can differ until restart; diagnostics must report `integration_version: 1.2.0`.
+2. In Settings → Devices & services → AO Smith Local BLE → Configure, enable
+   **Experimental energy preference control**.
+3. With iCOMM disconnected, select **More Hot Water** on the heater's new dropdown.
+4. Download integration diagnostics. `transport.commands` records the original
+   value, requested value, readback and result. `readback_confirmed` confirms
+   stored bytes; `already_matches` means no write was needed or sent.
+5. **Restore original energy preference** returns to the first saved pre-test
+   value, including after HA restarts. The backup is retained after restoration.
 
-1. Update and restart Home Assistant. Enable **Inspect extended registers** on
-   the device page if it is disabled.
-2. Press it, wait for the action to finish, and download integration diagnostics.
-   Note the preference currently shown in iCOMM.
-3. Change the preference in iCOMM (for example, Most Savings to More Hot Water)
-   and wait for the app to confirm it was applied. Inspect again and download
-   a second diagnostics file, noting the new preference.
+The original value is saved and verified on disk before the first write. Only
+words 0, 1 and 2 are accepted. An unreadable/unsupported or unexpected initial
+word stops the test without writing. Each selection sends at most one write;
+failed/ambiguous writes are never repeated or redirected to another address.
+The feature is off by default and enabling it alone sends no setting writes.
 
-If iCOMM needs a Bluetooth connection, temporarily disable the HA integration
-while using it, then re-enable HA before the second capture. Use the official
-app's supported setup/connection flow if it requires Internet access. Inspection
-makes no heater-setting changes, adds no entities, and is not part of regular
-polling. A matching read alone does not prove a writable preference control;
-we will verify a single-setting write separately before exposing it.
+The app also uses the preference to calculate the uploaded schedule's event
+modes. This experimental dropdown does **not** regenerate the schedule, so a
+successful readback is not a promise of changed heating behavior. No clock,
+threshold, enrollment, temperature or mode setting is changed by this test.
+
+The disabled-by-default **Inspect extended registers** button still captures
+both preference candidates read-only for comparison.
 
 ## Configuration
 
