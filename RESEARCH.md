@@ -61,9 +61,11 @@ setpoint increase and no write to the maximum register.
    (two-digit year, month and day). They do not send an IANA timezone name.
 2. Connect generator #13456, offsets 0x8E–0xAA, compares the current device profile
    with `heatPump`. Only that older profile calls `setEssentialParams`.
-3. `setEssentialParams` generator #13493 invokes `setClock`. The next-generation
-   connection path skips it. This guard was checked in bytecode as well as the
-   decompiler output.
+3. `setEssentialParams` generator #13493 invokes `setClock`. A connection whose
+   app profile is a next-generation enum skips it. The profile comes from the
+   registered-device record, not directly from the physical model number; the
+   owner's actual app record has not been retrieved. This guard was checked in
+   bytecode as well as the decompiler output.
 4. Next-generation module 1422 exposes setpoint/mode/status registers in blocks
    1, 2, 11, 27 and 28. No replacement clock setter was found in that module.
 5. BLE TOU upload generator #13465 calls the holiday/preference writer and then
@@ -389,11 +391,13 @@ Consequences: Bluetooth time setting is a credible capability, and an internal
 clock can continue running without the phone. It does not follow that every
 connection synchronizes time, nor that the exposed legacy address is shared by
 the HPS10. The owner's all-zero 26:3/4 reads do not identify a running RTC. The
-remaining discriminating evidence is the official app's actual transmitted
-frames during a Bluetooth-only reconnect and tariff save on this hardware,
-including a phone-local time reference. HA's own traffic log does not capture
-another central device's writes. No next-generation clock write or automatic
-clock synchronization is added in this release.
+remaining evidence includes the app's actual registered device profile and
+normalized tariff data, plus the heater's stored schedule blocks. The detailed
+follow-up below identifies these steps before traffic capture. If a capture is
+needed, it must include official-app Bluetooth reconnect/tariff-save traffic
+and a phone-local time reference; HA's own traffic log cannot see another
+central device's writes. No next-generation clock write or automatic clock
+synchronization is added in this release.
 
 ### Capture-version correction
 
@@ -404,3 +408,26 @@ frames. File 14 also contains an old September 29 extended snapshot, while file
 19's snapshot stopped after a timeout. These are not evidence of unchanged
 preference candidates. A full HA restart is needed to load and verify the new
 runtime before the experimental test.
+
+## Full onboarding and tariff reconstruction — October 5, 2026
+
+[Onboarding, clock setting, and tariff reconstruction](research/ONBOARDING_AND_TOU.md)
+traces QR/manual registration, device-record selection, first Bluetooth setup,
+ordinary reconnect, initial tariff upload, preference changes, and separate
+Wi-Fi provisioning. It corrects the assumption that the physical HPS10 model
+alone identifies the app's clock branch: the cloud-provided `deviceType` is the
+actual selector, and no onboarding alias to the legacy profile was found.
+
+The follow-up includes an [offline generator](research/replay_tou.py) and
+explicitly illustrative [Rate 195 input](research/rate195_illustrative_input.json)
+and [all-preference output](research/rate195_illustrative_output.json). Preference
+changes alter generated event modes, while the same input retains the same
+time boundaries. In the fixture, both savings options retain DR1 from 19:00 to
+22:00, and the minimum-price check places load-up at 03:00 before the 06:00 price
+rise. These are reproducible app-algorithm results, not the owner's tariff
+response or a heater readback.
+
+The detailed report also records a bytecode-confirmed apparent tail omission
+in the app's BLE season frame builder, the limits of clock/DST evidence, and
+what can be learned before sniffing traffic. No production integration code,
+version, or heater settings changed in this follow-up.

@@ -1,0 +1,222 @@
+{
+  "description": "Illustrative PSEG LI Rate 195 calendar using published power-supply multipliers, normalized to a monthly base of 1. NOT fetched from iCOMM, NOT read from the heater. Delivery charges and holidays omitted. Tests event-generation behavior; not an exact reproduction of the owner's stored tariff.",
+  "source": "https://www.psegliny.com/aboutpseglongisland/ratesandtariffs/-/media/A0FDA80A6FE44A45973922422E86BD9E.ashx",
+  "touEvents": [
+    {
+      "month": 1,
+      "day": 1,
+      "fromDayOfWeek": 0,
+      "toDayOfWeek": 4,
+      "hour": 0,
+      "minute": 0,
+      "rate": 0.6
+    },
+    {
+      "month": 1,
+      "day": 1,
+      "fromDayOfWeek": 0,
+      "toDayOfWeek": 4,
+      "hour": 6,
+      "minute": 0,
+      "rate": 1
+    },
+    {
+      "month": 1,
+      "day": 1,
+      "fromDayOfWeek": 0,
+      "toDayOfWeek": 4,
+      "hour": 15,
+      "minute": 0,
+      "rate": 1.9688
+    },
+    {
+      "month": 1,
+      "day": 1,
+      "fromDayOfWeek": 0,
+      "toDayOfWeek": 4,
+      "hour": 19,
+      "minute": 0,
+      "rate": 1
+    },
+    {
+      "month": 1,
+      "day": 1,
+      "fromDayOfWeek": 0,
+      "toDayOfWeek": 4,
+      "hour": 22,
+      "minute": 0,
+      "rate": 0.6
+    },
+    {
+      "month": 1,
+      "day": 1,
+      "fromDayOfWeek": 5,
+      "toDayOfWeek": 6,
+      "hour": 0,
+      "minute": 0,
+      "rate": 0.6
+    },
+    {
+      "month": 1,
+      "day": 1,
+      "fromDayOfWeek": 5,
+      "toDayOfWeek": 6,
+      "hour": 6,
+      "minute": 0,
+      "rate": 1
+    },
+    {
+      "month": 1,
+      "day": 1,
+      "fromDayOfWeek": 5,
+      "toDayOfWeek": 6,
+      "hour": 22,
+      "minute": 0,
+      "rate": 0.6
+    },
+    {
+      "month": 6,
+      "day": 1,
+      "fromDayOfWeek": 0,
+      "toDayOfWeek": 4,
+      "hour": 0,
+      "minute": 0,
+      "rate": 0.6
+    },
+    {
+      "month": 6,
+      "day": 1,
+      "fromDayOfWeek": 0,
+      "toDayOfWeek": 4,
+      "hour": 6,
+      "minute": 0,
+      "rate": 1
+    },
+    {
+      "month": 6,
+      "day": 1,
+      "fromDayOfWeek": 0,
+      "toDayOfWeek": 4,
+      "hour": 15,
+      "minute": 0,
+      "rate": 1.7419
+    },
+    {
+      "month": 6,
+      "day": 1,
+      "fromDayOfWeek": 0,
+      "toDayOfWeek": 4,
+      "hour": 19,
+      "minute": 0,
+      "rate": 1
+    },
+    {
+      "month": 6,
+      "day": 1,
+      "fromDayOfWeek": 0,
+      "toDayOfWeek": 4,
+      "hour": 22,
+      "minute": 0,
+      "rate": 0.6
+    },
+    {
+      "month": 6,
+      "day": 1,
+      "fromDayOfWeek": 5,
+      "toDayOfWeek": 6,
+      "hour": 0,
+      "minute": 0,
+      "rate": 0.6
+    },
+    {
+      "month": 6,
+      "day": 1,
+      "fromDayOfWeek": 5,
+      "toDayOfWeek": 6,
+      "hour": 6,
+      "minute": 0,
+      "rate": 1
+    },
+    {
+      "month": 6,
+      "day": 1,
+      "fromDayOfWeek": 5,
+      "toDayOfWeek": 6,
+      "hour": 22,
+      "minute": 0,
+      "rate": 0.6
+    },
+    {
+      "month": 10,
+      "day": 1,
+      "fromDayOfWeek": 0,
+      "toDayOfWeek": 4,
+      "hour": 0,
+      "minute": 0,
+      "rate": 0.6
+    },
+    {
+      "month": 10,
+      "day": 1,
+      "fromDayOfWeek": 0,
+      "toDayOfWeek": 4,
+      "hour": 6,
+      "minute": 0,
+      "rate": 1
+    },
+    {
+      "month": 10,
+      "day": 1,
+      "fromDayOfWeek": 0,
+      "toDayOfWeek": 4,
+      "hour": 15,
+      "minute": 0,
+      "rate": 1.9688
+    },
+    {
+      "month": 10,
+      "day": 1,
+      "fromDayOfWeek": 0,
+      "toDayOfWeek": 4,
+      "hour": 19,
+      "minute": 0,
+      "rate": 1
+    },
+    {
+      "month": 10,
+      "day": 1,
+      "fromDayOfWeek": 0,
+      "toDayOfWeek": 4,
+      "hour": 22,
+      "minute": 0,
+      "rate": 0.6
+    },
+    {
+      "month": 10,
+      "day": 1,
+      "fromDayOfWeek": 5,
+      "toDayOfWeek": 6,
+      "hour": 0,
+      "minute": 0,
+      "rate": 0.6
+    },
+    {
+      "month": 10,
+      "day": 1,
+      "fromDayOfWeek": 5,
+      "toDayOfWeek": 6,
+      "hour": 6,
+      "minute": 0,
+      "rate": 1
+    },
+    {
+      "month": 10,
+      "day": 1,
+      "fromDayOfWeek": 5,
+      "toDayOfWeek": 6,
+      "hour": 22,
+      "minute": 0,
+      "rate": 0.6
+    }
+  ]
+}
