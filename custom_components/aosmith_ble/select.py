@@ -3,7 +3,15 @@
 from homeassistant.components.select import SelectEntity
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import CONF_ENERGY_PREFERENCE, DOMAIN, ENERGY_PREFERENCES, HOT_WATER_PLUS, MODE, MODE_NAMES
+from .const import (
+    CONF_ENERGY_PREFERENCE,
+    DOMAIN,
+    ENERGY_PREFERENCE,
+    ENERGY_PREFERENCES,
+    HOT_WATER_PLUS,
+    MODE,
+    MODE_NAMES,
+)
 from .entity import HeaterEntity
 from .protocol import encode_timed_mode
 
@@ -37,7 +45,8 @@ class ExperimentalEnergyPreference(HeaterEntity, SelectEntity):
     def extra_state_attributes(self):
         return {
             "behavior_verified": False,
-            "schedule_rebuilt": False,
+            "rebuilds_saved_tariff": bool(self.coordinator.options.get("tariff")),
+            "register": list(ENERGY_PREFERENCE),
             "original_value": (self.coordinator.preference_backup or {}).get("value"),
         }
 

@@ -65,19 +65,66 @@
     "step": {
       "settings": {
         "title": "Controls and readings",
-        "description": "Local Bluetooth settings. Temperature controls and energy readings are always enabled. Hot-water availability uses the tested HPS10 categories automatically. Enable Hot Water Plus only if your heater offers it. Experimental energy preference saves the original setting and verifies readback. Its effect on heating is unverified; it does not rebuild your rate schedule.",
+        "description": "Local Bluetooth settings. The experimental preference control uses the readable 28:75 candidate. With a cached tariff it rebuilds and uploads the schedule; without one it changes only the preference word. Heating effects remain unverified.",
         "data": {
           "poll_interval": "Polling interval (seconds)",
           "enable_hot_water_plus": "Enable Hot Water Plus (supported models only)",
           "enable_experimental_energy_preference": "Enable experimental energy preference control"
         }
+      },
+      "init": {
+        "title": "AO Smith Local BLE",
+        "menu_options": {
+          "settings": "Controls and readings",
+          "tariff": "Find and apply a tariff",
+          "remove_tariff": "Forget cached tariff"
+        }
+      },
+      "tariff": {
+        "title": "Find your utility",
+        "description": "Uses AO Smith’s anonymous tariff service. No AO Smith account is needed.",
+        "data": {
+          "zipcode": "ZIP code"
+        }
+      },
+      "utility": {
+        "title": "Choose utility",
+        "data": {
+          "utility_id": "Utility"
+        }
+      },
+      "rate": {
+        "title": "Choose rate plan",
+        "data": {
+          "tariff_id": "Rate plan"
+        }
+      },
+      "tariff_confirm": {
+        "title": "Apply tariff to water heater",
+        "description": "{utility} · {tariff}\n\nThe plan contains {events} price events. Applying saves the original heater schedule, uploads the selected preference and generated events, and checks readback. Allow several minutes. These writes are experimental on HPS10.\n\n{detail}",
+        "data": {
+          "preference": "Energy preference",
+          "sync_clock": "Set heater clock from Home Assistant before uploading"
+        }
+      },
+      "remove_tariff": {
+        "title": "Forget cached tariff",
+        "description": "Removes the downloaded plan from Home Assistant. The heater’s stored schedule stays in place. Use Restore original tariff schedule to restore the saved heater data."
       }
+    },
+    "progress": {
+      "uploading_tariff": "Reading the original schedule and applying the new tariff. This can take several minutes. Keep the heater connected."
+    },
+    "error": {
+      "invalid_zipcode": "Enter a five-digit ZIP code.",
+      "tariff_lookup_failed": "Could not retrieve the tariff data. Check Internet access and try again.",
+      "tariff_apply_failed": "The tariff was not confirmed. See the detail above and download diagnostics. The original schedule remains available to restore if writes began."
     }
   },
   "services": {
     "set_timed_mode": {
       "name": "Set timed mode",
-      "description": "Enter a mode and duration together: Electric 1\u20137 days, Vacation 1\u201399 days (100 means until changed), or Guest 1\u20137 days. Finite countdowns are APK-derived and not yet verified on hardware.",
+      "description": "Enter a mode and duration together: Electric 1–7 days, Vacation 1–99 days (100 means until changed), or Guest 1–7 days. Finite countdowns are APK-derived and not yet verified on hardware.",
       "fields": {
         "config_entry_id": {
           "name": "Water heater",

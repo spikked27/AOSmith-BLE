@@ -1,20 +1,47 @@
-## AO Smith Local BLE 1.2.0
+## AO Smith Local BLE 1.3.0
 
-Adds an opt-in **Energy preference (experimental)** dropdown with **More Hot
-Water**, **More Savings**, and **Most Savings**. Configure the integration to
-show it, then select a preference explicitly. Enabling the feature does not
-change any heater setting.
+Adds **Diagnostic read status** and a persistent completion notification. Wait
+for the notification before downloading diagnostics. Extended reads now continue
+after optional registers return status 0x40, so the rejected preference candidate
+does not prevent later clock reads. Counts distinguish rejected and unread items.
 
-The test uses only iCOMM's BLE candidate address, saves the initial word on disk,
-sends one write, and verifies readback. **Restore original energy preference**
-uses the saved value even after restart. Unsupported reads, unexpected values,
-or failed backup prevent writes; ambiguous writes are not automatically retried.
+The experimental preference destination changes to **28:75**: the owner's latest
+capture reads `0000` there and rejects 28:113. The captured read packets have valid
+CRCs; the earlier “checksum rejected” message alone did not identify a bad CRC.
+There is no automatic alternate-address fallback.
 
-This is a hardware experiment: readback confirms a stored word, not heating
-behavior. The app also recalculates schedule modes from the preference; this
-release does not rewrite the schedule, clock, tariffs or other settings.
+**Set heater clock (experimental)** sends HA-local time/date using the recovered
+app clock format, checks acknowledgement and readback, and records the result.
+This is an explicit next-generation trial; clock writes are not automatic at
+startup. An unsupported initial read does not prevent the requested trial.
 
-Update through HACS and **restart Home Assistant**. Enable experimental energy
-preference in integration options, try More Hot Water, then download diagnostics.
-Check the `transport.commands` result and `energy_preference_original` fields.
-See RESEARCH.md for the repeated clock investigation and exact known limitations.
+**Configure → Find and apply a tariff** restores the anonymous AO Smith API:
+ZIP → utility → plan → preference → upload. It generates five season blocks plus
+holiday/preference data, saves the original schedule durably before writes, and
+checks each chunk. With a cached tariff, the preference dropdown regenerates the
+whole schedule. Without one it remains a single-word experiment. New controls
+read the complete stored schedule and restore the original schedule; the latter
+backup survives HA restarts. An ambiguous upload stops without replaying writes.
+
+**Integration version** shows the running version, downloaded version, and whether
+a restart is needed. Python code updates still require a **Home Assistant restart**;
+integration Reload cannot reliably load new code. No host/Unraid reboot is needed.
+Settings changes and tariff actions work without restarting HA after installation.
+
+### Try this release
+
+1. Update through HACS and restart Home Assistant. Confirm Integration version is
+   **1.3.0**. Keep the existing pairing and close iCOMM.
+2. Press **Set heater clock (experimental)**.
+3. Enable **Inspect extended registers** and **Read stored tariff schedule** in
+   the entity list. Run each separately and wait for its completion notification,
+   then download diagnostics. The status includes incomplete/failed results too.
+4. Use **Configure → Find and apply a tariff** to select your actual plan. The
+   clock option can be disabled if testing the schedule separately. Allow several
+   minutes and retain the resulting diagnostics.
+
+The software suite passes 187 tests on HA 2025.12.5, with lint, formatting and
+archive checks. New clock/schedule writes have not been tested on the physical
+heater. Readback proves stored bytes, not clock ticking, DST handling or schedule
+activation. Live API access was unavailable from the development workspace;
+lookup is covered with fixtures and will run from your Home Assistant.

@@ -85,7 +85,7 @@ Optional polls never replace a missing value with zero. Unknown-register status
 and defer the failed register for ten minutes. Core readings already obtained
 remain usable. Writes still require exact full-word readback and are never replayed.
 
-## Schedule and tariff research (no schedule writes exposed)
+## Schedule and tariff implementation (experimental in 1.3.0)
 
 The APK has local season writers for blocks 21–25 (functions 14724–14749).
 The serializer `seasonToHex` emits four date bytes then twenty six-byte event
@@ -95,15 +95,21 @@ writes, then reads parameter 0x3E. Holiday data and time/preference setup are
 separate. Commit/checksum behavior and next-generation clock/preference addresses
 still require validation. The two concrete preference candidates and their
 conflicting APK paths are documented in RESEARCH.md. Inspect reads 28:75 and
-28:113 without interpreting or writing them. Older-family addresses must not be reused on HPS10.
+28:113 for comparison. The owner capture supports 28:75 as a readable candidate;
+the explicitly authorized 1.3.0 experiment uses it without address fallback.
 
 The app also fetches tariff metadata from GraphQL and energy history from
 `getEnergyUseData` (average, dated kWh, lifetimeKwh). A local energy word is not
 therefore assumed to equal the cloud lifetime counter. No arbitrary register
-write or opaque schedule-upload action is exposed.
+write or opaque schedule-upload action is exposed. The dedicated writer accepts
+only five 124-byte seasons at blocks 21–25 and 29 words at 28:50–78. It saves
+the full original before mutation, verifies every write ACK and readback, and
+retains the parameter-62 read. It writes all twenty event slots, including the
+two slots the app's BLE frame builder apparently omits. Firmware activation is
+not inferred from matching bytes.
 
 
-## Energy and retired tariff functionality
+## Energy and restored tariff functionality
 
 The electrical-use words at 27:7–9 combine MSW first into a 48-bit Wh counter.
 Observed words 0000 0005 5944 produce 350532 Wh, consistent with the owner’s
@@ -113,11 +119,15 @@ is supported by one paired observation; progression/reset behavior still require
 The grouped request/reply was subsequently confirmed on hardware. Missing/error/all-FFFF
 responses never become a false zero. The grid-energy groups remain undecoded.
 
-The former tariff lookup/cache was removed in development 0.3.2.dev1.
-Use iCOMM for tariff setup; this component exposes no schedule programming.
+The former tariff lookup/cache was removed in development 0.3.2.dev1 and restored
+in 1.3.0 using the anonymous `r2.wh8.co/graphql` queries. Returned normalized
+price events feed the recovered preference-dependent schedule generator. Known
+holiday IDs use the app's packed rules; unknown IDs stop generation. Cached plans
+are rebuilt on preference changes, with no periodic cloud refresh.
 Manual inspection includes candidate clock words 26:3–4 from the older-profile
 APK clock writer; their meaning on next-generation heaters remains unverified.
-See RESEARCH.md for the clock and schedule findings.
+The explicit clock trial writes minute/hour followed by packed year/month/day
+using HA-local time and records ACK/readback. See RESEARCH.md for the trace.
 
 
 ## 0.3.1 availability and clock evidence
@@ -153,7 +163,9 @@ The app connection generator #13456 checks `heatPump` before calling
 `setEssentialParams` (#13493), which invokes `setClock` (#14611). Bytecode offsets
 0x8E–0xAA establish that profile guard. Consequently, the block-26 clock writer
 is not established for the next-generation heater. Four zero captures do not
-resolve it. See RESEARCH.md; do not reuse the older writer as a generic clock action.
+resolve it. Version 1.3.0 exposes this exact format as an explicitly requested
+experiment; it is not used on startup or polling, and next-generation clock
+support is not claimed. The payload contains no timezone or DST rules.
 
 
 ## Consolidated fault decoding and final review
@@ -202,7 +214,7 @@ WATER_AVAILABLE path selects the low byte without signed conversion. A signed
 The full raw word is now retained as `state.availability_word` in diagnostics.
 No unknown availability code is converted to an error or guessed percentage.
 
-## Experimental preference write (1.2.0)
+## Historical experimental preference write (1.2.0)
 
 The explicit opt-in test uses 28:113 (0x1C:0x71), matching the BLE
 `sendHolidays → formatExtraData → createHolidayFrames` path. Mapping:
@@ -212,3 +224,28 @@ It reads the original word, waits for a durable backup, sends one write, and
 checks up to three readbacks. Same-value requests send no write. It never tries
 28:75 or legacy 27:113 as a fallback. This does not demonstrate that firmware
 applies the preference or recalculates its already-uploaded schedule.
+
+## Owner capture and revised experiments (1.3.0)
+
+The October 5 23:18:56 UTC capture contains:
+
+| Register | Request | Reply | Result |
+|---|---|---|---|
+| 28:75 | `BDA0071C4B011C` | `DB02091C4B000080CE` | Read succeeds, word 0000 |
+| 28:113 | `BDA0071C710186` | `DB02071C7140DE` | Status 0x40 rejection |
+
+All four frames have valid CRCs. The app labels 0x40 invalid CRC, but this
+transaction does not demonstrate a framing-checksum bug. Parameter 113 is beyond
+the declared 112-word block-28 map. The dump predates the failed preference-write
+screenshot and contains no setting command, so it cannot establish write bytes.
+
+The opt-in word trial now explicitly targets 28:75 and keeps the 1/0/2 mapping.
+Its durable backup key is separate from the old 28:113 backup. With a cached
+tariff, the selector instead regenerates and uploads the full schedule. Original
+schedule restoration includes holidays, preference, thresholds and lead time;
+it does not reset the current clock. Interrupted writes are not replayed.
+
+Optional reads continue after status 1 or 0x40; transport/corrupt-response failures
+still stop the scan. A completion status and notification distinguish finished,
+rejected, incomplete and failed reads. The complete schedule reader captures all
+five seasons and 28:50–78 independently of the shorter extended-register scan.

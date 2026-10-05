@@ -567,7 +567,8 @@ async def test_tariff_removed_from_options_and_entity_setup(tmp_path, coordinato
     flow.hass = hass
     with patch.object(OptionsFlow, "config_entry", new_callable=PropertyMock, return_value=entry):
         form = await flow.async_step_init()
-        assert form["type"] == "form" and form["step_id"] == "settings"
+        assert form["type"] == "menu" and "tariff" in form["menu_options"]
+        form = await flow.async_step_settings()
         result = await flow.async_step_settings({"poll_interval": 60})
         assert result["data"] == clean_options({"poll_interval": 60})
         assert {str(key) for key in form["data_schema"].schema} == {
@@ -683,9 +684,9 @@ async def test_release_entities_are_minimal_with_opt_in_debug(tmp_path, coordina
         await platform.async_setup_entry(hass, entry, entities.extend)
     normal = [e for e in entities if e.entity_registry_enabled_default]
     debug = [e for e in entities if not e.entity_registry_enabled_default]
-    assert len(normal) == 5 and len(debug) == 3
-    assert all(e.entity_category is None for e in normal)
-    assert {e.action for e in debug} == {"refresh", "reconnect", "inspect"}
+    assert len(normal) == 9 and len(debug) == 4
+    assert sum(e.entity_category is None for e in normal) == 5
+    assert {e.action for e in debug} == {"refresh", "reconnect", "inspect", "inspect_schedule"}
     await hass.async_stop()
 
 
@@ -745,7 +746,7 @@ async def test_experimental_preference_opt_in_entities(coordinator):
 
     hass = SimpleNamespace(data={DOMAIN: {"test": coordinator}})
     entry = SimpleNamespace(entry_id="test", options={CONF_ENERGY_PREFERENCE: True})
-    coordinator.preference_backup = {"register": [28, 113], "value": 2}
+    coordinator.preference_backup = {"register": [28, 75], "value": 2}
     coordinator.async_test_energy_preference = AsyncMock()
     coordinator.data = HeaterState(125, 4, 5, 0, registers={"energy_preference_experimental": 1})
     entities = []
@@ -787,7 +788,7 @@ async def test_preference_backup_survives_coordinator_restart(tmp_path):
         first = HeaterCoordinator(hass, entry)
         first.async_request_refresh = AsyncMock()
         await first.async_test_energy_preference("More Hot Water")
-        assert first.preference_backup == {"register": [28, 113], "value": 2}
+        assert first.preference_backup == {"register": [28, 75], "value": 2}
         await first.async_test_energy_preference("More Savings")
         assert first.preference_backup["value"] == 2
         restarted = HeaterCoordinator(hass, entry)

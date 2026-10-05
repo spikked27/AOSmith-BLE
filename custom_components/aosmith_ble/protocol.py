@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import math
+from datetime import datetime
 
 from .crc_table import CRC_TABLE
 
@@ -24,7 +25,7 @@ class StatusError(ProtocolError):
             8: "pairing identifier not found",
             16: "session expired",
             32: "challenge invalid",
-            64: "checksum rejected",
+            64: "status 0x40 (app labels invalid CRC; register rejection is also possible)",
         }.get(self.code, "invalid status")
         super().__init__(f"Heater rejected request: {meaning} (0x{status:02X})")
 
@@ -63,6 +64,33 @@ def read_frame(block: int, parameter: int, count: int = 1) -> bytes:
 
 def write_frame(block: int, parameter: int, value: int) -> bytes:
     return frame(0x40, bytes((block, parameter)) + value.to_bytes(2, "big"))
+
+
+def write_words_frame(block: int, parameter: int, words) -> bytes:
+    words = tuple(words)
+    if not 1 <= len(words) <= 6 or not 0 <= parameter <= 256 - len(words):
+        raise ValueError("Write one to six contiguous words")
+    if not 0 <= block <= 255 or any(type(word) is not int or not 0 <= word <= 65535 for word in words):
+        raise ValueError("Invalid block or word")
+    return frame(0x40, bytes((block, parameter)) + b"".join(word.to_bytes(2, "big") for word in words))
+
+
+def encode_clock(local: datetime) -> tuple[int, int]:
+    """iCOMM legacy setter: minute/hour, then packed year/month/day."""
+    if local.tzinfo is None or local.utcoffset() is None or not 2000 <= local.year <= 2099:
+        raise ValueError("Use timezone-aware local time in 2000–2099")
+    return (local.minute << 8) | local.hour, ((local.year % 100) << 9) | (local.month << 5) | local.day
+
+
+def decode_clock(words) -> str | None:
+    """Display raw local calendar fields without inventing a timezone or seconds."""
+    try:
+        time_word, date_word = words
+        return datetime(
+            2000 + (date_word >> 9), (date_word >> 5) & 15, date_word & 31, time_word & 255, time_word >> 8
+        ).isoformat(timespec="minutes")
+    except (ValueError, TypeError):
+        return None
 
 
 def read_value(packet: bytes, block: int, parameter: int) -> int:

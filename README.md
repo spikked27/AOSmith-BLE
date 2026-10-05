@@ -19,9 +19,10 @@ different protocols. This project is independent of A. O. Smith.
 | Energy usage | Cumulative electricity use in kWh; supports the HA Energy dashboard |
 | Error status | Indicates a reported heater fault and provides its description and code |
 
-Hot Water Plus can be enabled for models that support it. Diagnostic buttons are
-available when needed and disabled by default. An experimental energy-preference control is opt-in. Tariff lookup and schedule
-programming are not included.
+Hot Water Plus can be enabled for models that support it. Version 1.3.0 adds an
+experimental clock-set button, tariff lookup/upload, original-schedule restore,
+and an opt-in energy-preference control. Diagnostic read status and integration
+version sensors are enabled by default; four debug buttons are disabled by default.
 
 ## Requirements
 
@@ -31,8 +32,9 @@ programming are not included.
   Bluetooth infrastructure but has not been tested with this heater yet.
 - Bluetooth enabled on the water heater and its six-digit pairing PIN.
 
-No proprietary APK is needed. Normal heater control and polling are local;
-installing and downloading updates requires Internet access.
+No proprietary APK is needed. Normal heater control and polling are local.
+Updates and optional tariff lookup require Internet access from Home Assistant;
+tariff lookup uses AO Smith's anonymous service and requires no AO Smith account.
 
 ## Install with HACS
 
@@ -132,62 +134,68 @@ mapping; existing recorded history is not rewritten.
 **Energy usage** reports cumulative kWh and can be added to the Energy dashboard.
 It does not import cloud history or provide instantaneous power measurements.
 
-### Errors, clock and utility tariffs
+### Errors and clock setting
 
 **Error status** reports the heater's current fault, including unknown codes.
-Open the entity for the description and code. Fault **42: Clock not set** includes
-instructions to connect the heater to the Internet through the official iCOMM
-app, then reconnect BLE and check that the fault clears. A persistent clock fault
-needs the manufacturer's setup/troubleshooting procedure. This integration does
-not set the heater's clock, and an absent fault does not verify time or timezone.
+Fault **42: Clock not set** means the heater reports an unset clock; an absent
+fault does not verify its time or timezone.
 
-Use iCOMM to configure utility plans and heater-owned schedules. **An offline
-heater cannot receive updated tariff data from the service.** Its stored schedule
-may continue, but this integration neither refreshes it nor verifies that its
-rates, holidays or seasonal rules remain current. Local control does not
-require cloud access; keeping a utility plan current may require reconnecting
-through the official app. We have not verified whether iCOMM refreshes existing
-plans automatically or requires reapplying them.
+**Set heater clock (experimental)** sends the current time in Home Assistant's
+configured timezone, using the app's known two-word clock format at 26:3–4. It
+records the initial read, write acknowledgement and readback in diagnostics.
+An unsupported initial clock read does not prevent this explicitly requested
+write trial. The next-generation clock mapping, continued ticking and DST
+handling remain hardware-unverified. No clock write occurs on startup or polling.
 
-### Energy usage preferences (experimental)
+### Utility tariffs and energy preferences (experimental)
 
-Version 1.2.0 adds an opt-in **Energy preference (experimental)** dropdown:
-More Hot Water, More Savings, and Most Savings. It uses the address constructed
-by iCOMM 14.1.0's BLE upload for next-generation heaters, 0x1C:0x71. The firmware
-meaning and effect on heating remain unverified. A separate Wi-Fi path places
-the preference at 0x1C:0x4B; this integration does not automatically try it.
+1. Open **Settings → Devices & services → AO Smith Local BLE → Configure →
+   Find and apply a tariff**. Enter your ZIP, utility and rate plan.
+2. Choose **More Hot Water**, **More Savings**, or **Most Savings**. The clock
+   option synchronizes local time before uploading; it can be unchecked when
+   testing a schedule independently of the clock command.
+3. Apply and leave the progress screen open until it finishes. The integration
+   reads and saves all five season blocks plus holiday/preference data before
+   sending any clock or schedule write, then verifies each written chunk.
+4. **Restore original tariff schedule** restores that first saved schedule,
+   including after HA restarts. A partial/ambiguous upload stops immediately;
+   diagnostics identify the last chunk. No write is automatically repeated.
 
-1. Update to 1.2.0 and **restart Home Assistant**. Downloaded and running versions
-   can differ until restart; diagnostics must report `integration_version: 1.2.0`.
-2. In Settings → Devices & services → AO Smith Local BLE → Configure, enable
-   **Experimental energy preference control**.
-3. With iCOMM disconnected, select **More Hot Water** on the heater's new dropdown.
-4. Download integration diagnostics. `transport.commands` records the original
-   value, requested value, readback and result. `readback_confirmed` confirms
-   stored bytes; `already_matches` means no write was needed or sent.
-5. **Restore original energy preference** returns to the first saved pre-test
-   value, including after HA restarts. The backup is retained after restoration.
+The lookup restores AO Smith's anonymous tariff API. The integration generates
+the seasonal events from its returned prices using the recovered iCOMM algorithm.
+The API supplies tariff data, not a universal fixed schedule for each preference.
+Changing the preference changes event modes; time boundaries and load-up
+placement follow tariff prices. The five stored season blocks include
+all twenty event slots per block. Unsupported holiday IDs or malformed tariff
+data stop generation before writing.
 
-The original value is saved and verified on disk before the first write. Only
-words 0, 1 and 2 are accepted. An unreadable/unsupported or unexpected initial
-word stops the test without writing. Each selection sends at most one write;
-failed/ambiguous writes are never repeated or redirected to another address.
-The feature is off by default and enabling it alone sends no setting writes.
+After a tariff has been applied, the **Energy preference (experimental)**
+dropdown regenerates and uploads the complete cached tariff with the new
+preference. This can take several minutes. It does not repeat the clock write.
+Without a cached tariff, enabling the dropdown in **Controls and readings**
+provides a single-word experiment at **28:75**. The owner's latest capture reads
+that address successfully and rejects the former 28:113 candidate with status
+0x40. There is no automatic alternate-address fallback.
 
-The app also uses the preference to calculate the uploaded schedule's event
-modes. This experimental dropdown does **not** regenerate the schedule, so a
-successful readback is not a promise of changed heating behavior. No clock,
-threshold, enrollment, temperature or mode setting is changed by this test.
+The word-only experiment saves its original value separately before writing.
+**Restore original preference word** restores only that word; use **Restore
+original tariff schedule** to restore the complete schedule. Both backups
+survive restarts. The preference control is opt-in; enabling it alone sends no writes.
 
-The disabled-by-default **Inspect extended registers** button still captures
-both preference candidates read-only for comparison.
+Readback verifies stored bytes, not actual heating behavior or schedule activation.
+Clock accuracy, DST and offline execution still need physical testing. There is
+no periodic tariff refresh: repeat the lookup when you want updated service data.
+Forgetting the cached tariff removes its HA configuration without changing the
+heater's stored schedule or deleting its original backup.
 
 ## Configuration
 
 **Settings → Devices & services → AO Smith Local BLE → Configure** offers:
 
-- **Polling interval:** 30 seconds by default; adjustable from 15 to 300 seconds.
-- **Hot Water Plus:** enable only if your heater offers this feature in iCOMM.
+- **Controls and readings:** polling interval (30 seconds by default, 15–300
+  seconds), Hot Water Plus, and experimental energy preference.
+- **Find and apply a tariff:** ZIP, utility, plan, preference and clock option.
+- **Forget cached tariff:** removes the cached plan without writing to the heater.
 
 Temperature controls, energy readings and active countdown polling are automatic.
 No separate keepalive option is needed. The integration keeps its BLE connection
@@ -197,7 +205,14 @@ or long radio idle period can depend on firmware.
 ## Updates and cleanup
 
 Update through HACS, then **restart Home Assistant**. Keep the existing integration
-and pairing; do not remove and re-add it for an update.
+and pairing; do not remove and re-add it for an update. A host/Unraid reboot is
+not needed. Integration Reload reuses imported Python modules and cannot reliably
+load an update. Once the release is running, settings changes reload the entry
+automatically and tariff actions do not need an HA restart.
+
+The **Integration version** sensor shows the running version. Its attributes
+include the downloaded version and `restart_required`, so a downloaded update
+that has not been loaded is visible after the next poll.
 
 Version 1.1.0 fixes the shrinking temperature ceiling, defaults availability to
 HPS10, and changes the Vacation control to Vacation/Guest mode. The update
@@ -206,8 +221,8 @@ versions: duplicate temperature/countdown sensors and old tariff, raw-fault and
 demand-response entities. No manual purge is needed. Recorder history is not
 purged. Remove any dashboard cards or automations you created for retired entities.
 
-Three current debug buttons remain disabled by default: Refresh readings,
-Reconnect Bluetooth, and Inspect extended registers. These are optional tools,
+Four current debug buttons remain disabled by default: Refresh readings,
+Reconnect Bluetooth, Inspect extended registers, and Read stored tariff schedule. These are optional tools,
 not abandoned entities. User-enabled debug buttons remain enabled on later updates.
 
 ## Troubleshooting
@@ -229,8 +244,16 @@ sharing because other integrations may include private details.
 
 To use a debug button, open **Settings → Devices & services → Entities**, show
 disabled entities, filter by this integration, and enable the required button.
-Inspect extended registers is read-only. Diagnostic histories are bounded, kept
-in memory and cleared on reload. Nothing is uploaded automatically.
+**Inspect extended registers** and **Read stored tariff schedule** are read-only.
+Watch **Diagnostic read status**: it changes to Reading, then Complete, Complete
+with errors, Incomplete, or Failed. A persistent notification says when the read
+has stopped and diagnostics can be downloaded. Rejected optional registers no
+longer abort the remaining extended reads. The notification includes counts;
+Complete with errors means the scan finished but some registers were rejected.
+
+Diagnostic traffic histories and manual captures are bounded and cleared on
+reload. Original preference/schedule backups and the last tariff operation are
+stored persistently. Nothing is uploaded automatically.
 
 ## Development and support
 

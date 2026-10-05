@@ -19,20 +19,27 @@ FAULT = (2, 7)
 MIN_TEMP_F = 95
 MAX_TEMP_F = 150
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 CONF_ENERGY_PREFERENCE = "enable_experimental_energy_preference"
-ENERGY_PREFERENCE = (28, 113)
+ENERGY_PREFERENCE = (28, 75)
+CLOCK = (26, 3)
 ENERGY_PREFERENCES = {"More Hot Water": 1, "More Savings": 0, "Most Savings": 2}
 DEFAULT_MODE_DAYS = {2: 7, 3: 1}
 
 
 def clean_options(options):
-    """Drop retired controls, tariff cache and availability calibration."""
-    return {
+    """Keep supported controls and a deliberately selected cached rate plan."""
+    result = {
         CONF_INTERVAL: options.get(CONF_INTERVAL, DEFAULT_INTERVAL),
         "enable_hot_water_plus": options.get("enable_hot_water_plus", False),
         CONF_ENERGY_PREFERENCE: options.get(CONF_ENERGY_PREFERENCE, False),
     }
+    tariff = options.get("tariff")
+    if isinstance(tariff, dict) and tariff.get("schema_version") == 1:
+        result["tariff"] = tariff
+        result["tariff_preference"] = options.get("tariff_preference", "More Hot Water")
+        result["tariff_sync_clock"] = options.get("tariff_sync_clock", True)
+    return result
 
 
 ENERGY = (27, 7)
@@ -60,7 +67,7 @@ OPTIONAL_REGISTERS = {
 }
 # Read-only capture; grid energy units and clock mapping remain unverified.
 # APK TOU paths disagree on the next-generation preference offset. The explicit
-# experimental control uses only the BLE path; neither value proves the meaning.
+# owner capture rejects 28:113 but reads 28:75; use the contiguous candidate.
 ENERGY_PREFERENCE_CANDIDATES = {
     "energy_preference_candidate_contiguous": (28, 75),
     "energy_preference_candidate_ble": (28, 113),

@@ -1,5 +1,12 @@
 # iCOMM onboarding, clock setting, and tariff schedule reconstruction
 
+This report records the static investigation before version 1.3.0. That release
+subsequently adds the authorized clock experiment, production tariff generator,
+full schedule capture, backup/upload/restore, and readable 28:75 preference trial.
+See [README](../README.md) and [PROTOCOL](../PROTOCOL.md) for current behavior.
+The static findings and hardware limitations below remain distinct from those
+new implementation choices.
+
 Research date: October 5, 2026. Scope: the supplied iCOMM Android 14.1.0 APK,
 Hermes bytecode version 96. APK SHA-256:
 `18cb2b977c049a9c4b4cf38a92dd0ce7fc57dc42b9b51f63fee17bd009992c7e`.

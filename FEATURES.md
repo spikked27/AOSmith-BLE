@@ -18,9 +18,11 @@ heat pumps, electric, gas, tankless and recirculation products with other maps.
 | Fault status | One Error status problem entity with readable current fault, including clock code 42 | Additional model/firmware validation |
 | Energy use and history | Local cumulative kWh sensor | Heating-cycle delta, reset behavior and other models |
 | Actual tank temperature / running components | No confirmed local mapping | Telemetry source and units |
-| Utility tariff lookup | Removed; use official iCOMM app | No tariff network access or cache retained |
-| Device clock and timezone | No clock writer; clock-unset code 42 included in Error status | Needed to validate heater-owned offline TOU; no verified next-gen writer |
-| On-heater schedules and holidays | Located, not enabled | Complete round-trip/backup/restore before writes |
+| Utility tariff lookup | Anonymous AO Smith API: ZIP → utility → plan; cached normalized price events | Live API response from owner's HA; no automatic refresh |
+| Device clock and timezone | Explicit experimental clock button uses HA's local timezone and recovered 26:3–4 format | Next-gen acceptance, ticking, DST and persistence remain unverified |
+| On-heater schedules and holidays | Experimental five-season generation/upload, full read, durable original backup and restore | Physical readback and actual activation/behavior |
+| Diagnostic completion | Read-status sensor and persistent finished notification, including rejected/unread counts | Read errors remain visible rather than fabricated data |
+| Update visibility | Running/downloaded version and restart-required attributes | Python updates still require HA restart; no host reboot |
 | Cloud notifications and energy graphs | Use HA automations/history once data exists | No cloud history imported |
 | Wi-Fi setup, account sharing and utility signup | Outside local heater-control scope | Require separate network/account workflows |
 | Leak accessories, fault reset, temperature differential | App has family-specific/cloud operations | Next-generation model applicability and local mapping |
@@ -39,8 +41,8 @@ not prove that an optional feature exists on a particular heater. Contributions
 should include model, firmware, redacted captures and expected physical behavior.
 Never submit a pairing identifier, PIN, APK, account token or Wi-Fi credentials.
 
-Energy usage preference now has an opt-in experimental dropdown and restore
-button. It tests only the app's BLE candidate with persistent original-value
-backup and readback. Hardware meaning, effect on recovery, and whether schedule
-regeneration is required remain unverified. No schedule or clock writer is
-exposed. See RESEARCH.md and README.md.
+Energy usage preference has an opt-in dropdown. With a cached tariff, it rebuilds
+the complete schedule, as the app does. Without one, it tests the readable 28:75
+word with a separate original-value backup and restore. No automatic address
+fallback is used. Readback does not establish heating effects. See RESEARCH.md
+and README.md for the app trace, owner-capture evidence and test workflow.

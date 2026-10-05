@@ -9,6 +9,8 @@ from homeassistant import config_entries
 from homeassistant.components import bluetooth
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     CONF_ENERGY_PREFERENCE,
@@ -22,6 +24,8 @@ from .const import (
 )
 from .coordinator import make_client
 from .protocol import ProtocolError, StatusError, validate_identifier
+from .schedule import PREFERENCES, build_schedule
+from .tariff import TariffError, TariffLookup, cache_plan
 
 
 def suggested_pin(name):
@@ -213,12 +217,25 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class OptionsFlow(config_entries.OptionsFlow):
+    def __init__(self):
+        self._utilities = {}
+        self._tariffs = {}
+        self._utility_id = None
+        self._candidate = None
+        self._upload_task = None
+        self._upload_error = None
+        self._preference = "More Hot Water"
+        self._sync_clock = True
+
     def _save(self, updates):
         options = clean_options({**self.config_entry.options, **updates})
         return self.async_create_entry(title="", data=options)
 
     async def async_step_init(self, user_input=None):
-        return await self.async_step_settings(user_input)
+        return self.async_show_menu(step_id="init", menu_options=["settings", "tariff", "remove_tariff"])
+
+    def _lookup(self):
+        return TariffLookup(async_get_clientsession(self.hass))
 
     async def async_step_settings(self, user_input=None):
         if user_input is not None:
@@ -241,3 +258,139 @@ class OptionsFlow(config_entries.OptionsFlow):
                 }
             ),
         )
+
+    async def async_step_tariff(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            zipcode = user_input["zipcode"].strip()
+            if not re.fullmatch(r"[0-9]{5}", zipcode):
+                errors["zipcode"] = "invalid_zipcode"
+            else:
+                try:
+                    self._utilities = await self._lookup().utilities(zipcode)
+                except TariffError:
+                    errors["base"] = "tariff_lookup_failed"
+                else:
+                    return await self.async_step_utility()
+        return self.async_show_form(
+            step_id="tariff", data_schema=vol.Schema({vol.Required("zipcode"): str}), errors=errors
+        )
+
+    async def async_step_utility(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            self._utility_id = user_input["utility_id"]
+            if self._utility_id not in self._utilities:
+                errors["base"] = "tariff_lookup_failed"
+            else:
+                try:
+                    self._tariffs = await self._lookup().tariffs(self._utility_id)
+                except TariffError:
+                    errors["base"] = "tariff_lookup_failed"
+                else:
+                    return await self.async_step_rate()
+        return self.async_show_form(
+            step_id="utility",
+            data_schema=vol.Schema({vol.Required("utility_id"): vol.In(self._utilities)}),
+            errors=errors,
+        )
+
+    async def async_step_rate(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            tariff_id = user_input["tariff_id"]
+            if tariff_id not in self._tariffs:
+                errors["base"] = "tariff_lookup_failed"
+            else:
+                try:
+                    self._candidate = cache_plan(
+                        await self._lookup().plan(tariff_id),
+                        self._utility_id,
+                        self._utilities[self._utility_id],
+                        tariff_id,
+                        self._tariffs[tariff_id],
+                    )
+                except TariffError:
+                    errors["base"] = "tariff_lookup_failed"
+                else:
+                    return await self.async_step_tariff_confirm()
+        return self.async_show_form(
+            step_id="rate",
+            data_schema=vol.Schema({vol.Required("tariff_id"): vol.In(self._tariffs)}),
+            errors=errors,
+        )
+
+    async def async_step_tariff_confirm(self, user_input=None):
+        if self._candidate is None:
+            return await self.async_step_tariff()
+        errors = {}
+        detail = self._upload_error or ""
+        if self._upload_error:
+            errors["base"] = "tariff_apply_failed"
+            self._upload_error = None
+        if user_input is not None:
+            self._preference = user_input["preference"]
+            self._sync_clock = user_input["sync_clock"]
+            try:
+                build_schedule(self._candidate, self._preference)
+            except (TariffError, ValueError) as err:
+                errors["base"] = "tariff_apply_failed"
+                detail = str(err)
+            else:
+                self._upload_task = None
+                return await self.async_step_tariff_apply()
+        return self.async_show_form(
+            step_id="tariff_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("preference", default=self._preference): vol.In(list(PREFERENCES)),
+                    vol.Required("sync_clock", default=self._sync_clock): bool,
+                }
+            ),
+            description_placeholders={
+                "utility": self._candidate["utility_name"],
+                "tariff": self._candidate["tariff_name"],
+                "events": str(len(self._candidate["touEvents"])),
+                "detail": detail,
+            },
+            errors=errors,
+        )
+
+    async def async_step_tariff_apply(self, user_input=None):
+        if self._upload_task is None:
+            coordinator = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
+            if coordinator is None:
+                self._upload_error = "The water heater integration is not loaded"
+                return await self.async_step_tariff_confirm()
+            self._upload_task = self.hass.async_create_task(
+                coordinator.async_apply_tariff(
+                    self._candidate, self._preference, sync_clock=self._sync_clock
+                ),
+                "aosmith_tariff_upload",
+            )
+        if not self._upload_task.done():
+            return self.async_show_progress(
+                step_id="tariff_apply", progress_action="uploading_tariff", progress_task=self._upload_task
+            )
+        try:
+            self._upload_task.result()
+        except (HomeAssistantError, TariffError, ValueError) as err:
+            self._upload_error = str(err)
+        return self.async_show_progress_done(next_step_id="tariff_result")
+
+    async def async_step_tariff_result(self, user_input=None):
+        if self._upload_error:
+            return await self.async_step_tariff_confirm()
+        return self._save(
+            {
+                "tariff": self._candidate,
+                "tariff_preference": self._preference,
+                "tariff_sync_clock": self._sync_clock,
+                CONF_ENERGY_PREFERENCE: True,
+            }
+        )
+
+    async def async_step_remove_tariff(self, user_input=None):
+        if user_input is not None:
+            return self._save({"tariff": None})
+        return self.async_show_form(step_id="remove_tariff", data_schema=vol.Schema({}))

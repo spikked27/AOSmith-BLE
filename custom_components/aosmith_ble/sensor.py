@@ -1,16 +1,70 @@
 """Hot-water availability and cumulative energy usage."""
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
-from homeassistant.const import PERCENTAGE, UnitOfEnergy
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfEnergy
 
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 from .entity import HeaterEntity
 from .protocol import decode_availability
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([HeaterSensor(coordinator, "availability"), EnergySensor(coordinator)])
+    async_add_entities(
+        [
+            HeaterSensor(coordinator, "availability"),
+            EnergySensor(coordinator),
+            DiagnosticReadStatus(coordinator),
+            IntegrationVersion(coordinator),
+        ]
+    )
+
+
+class DiagnosticReadStatus(HeaterEntity, SensorEntity):
+    _attr_name = "Diagnostic read status"
+    _attr_icon = "mdi:clipboard-check-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "diagnostic_read_status")
+
+    @property
+    def available(self):
+        return True
+
+    @property
+    def native_value(self):
+        return self.coordinator.diagnostic_status["status"]
+
+    @property
+    def extra_state_attributes(self):
+        return dict(self.coordinator.diagnostic_status)
+
+
+class IntegrationVersion(HeaterEntity, SensorEntity):
+    _attr_name = "Integration version"
+    _attr_icon = "mdi:information-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "integration_version")
+
+    @property
+    def available(self):
+        return True
+
+    @property
+    def native_value(self):
+        return VERSION
+
+    @property
+    def extra_state_attributes(self):
+        installed = self.coordinator.installed_version
+        return {
+            "running_version": VERSION,
+            "downloaded_version": installed,
+            "restart_required": installed is not None and installed != VERSION,
+        }
 
 
 class HeaterSensor(HeaterEntity, SensorEntity):

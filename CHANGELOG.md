@@ -1,3 +1,19 @@
+# 1.3.0 — October 5, 2026
+
+- Add diagnostic read status and a persistent finished notification. Continue
+  extended scans after optional-register status 0x40 and report rejected/unread counts.
+- Move the experimental preference trial to readable 28:75, with a separate backup
+  from 28:113 and no automatic address fallback.
+- Add the explicit HA-local clock trial with acknowledgement and readback.
+- Restore anonymous tariff lookup and preference-dependent schedule generation.
+  Save the full original before upload, verify each chunk, and provide read/restore
+  controls. Cached-tariff preference changes rebuild the complete schedule.
+- Fill all twenty event slots in each season, including the app builder's apparent
+  omitted tail; keep actual activation, clock and heating behavior unverified.
+- Show running/downloaded integration versions and pending-restart status. Code
+  updates still require HA restart; settings/tariff actions do not.
+- Pass 187 automated tests plus lint, formatting and release archive checks.
+
 # 1.2.0 — October 5, 2026
 
 - Add opt-in experimental energy-preference dropdown using the app BLE address

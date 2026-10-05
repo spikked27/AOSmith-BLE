@@ -13,6 +13,7 @@ from bleak.exc import BleakError
 
 from .const import (
     AVAILABILITY,
+    CLOCK,
     ENERGY_PREFERENCE,
     ENERGY_PREFERENCES,
     FAULT,
@@ -31,13 +32,17 @@ from .protocol import (
     StatusError,
     auth_frame,
     check_status,
+    decode_clock,
     decode_temperature,
+    encode_clock,
     frame,
     read_frame,
     read_words,
     validate_identifier,
     write_frame,
+    write_words_frame,
 )
+from .schedule import decode_season, season_words, validate_payloads
 
 LOGGER = logging.getLogger(__name__)
 
@@ -93,6 +98,9 @@ class HeaterClient:
         self.extended_capture = None
         self.optional_retry_after = {}
         self.optional_errors = {}
+        self.clock_operation = None
+        self.schedule_operation = None
+        self.schedule_capture = None
 
     def _record(self, event, **details):
         record = {"time": datetime.now(timezone.utc).isoformat(), "event": event, **details}
@@ -109,6 +117,9 @@ class HeaterClient:
             "commands": list(self.commands),
             "optional_errors": dict(self.optional_errors),
             "extended_capture": self.extended_capture,
+            "clock_operation": self.clock_operation,
+            "schedule_operation": self.schedule_operation,
+            "schedule_capture": self.schedule_capture,
         }
 
     def _disconnected(self, client):
@@ -279,7 +290,7 @@ class HeaterClient:
                 self.unsupported_registers.discard(register)
             except StatusError as err:
                 self.optional_errors[key] = str(err)
-                if err.code == 1:
+                if err.code in (1, 0x40):
                     self.unsupported_registers.add(register)
                     continue
                 break
@@ -294,10 +305,12 @@ class HeaterClient:
     async def inspect_registers(self, registers):
         """Capture only the caller's named allowlist; never issue writes or enroll keys."""
         async with self._lock:
+            started = datetime.now(timezone.utc).isoformat()
             try:
                 await self._ensure_session()
                 values = await self._read_optional(registers, retry_unsupported=True)
                 self.extended_capture = {
+                    "started_at": started,
                     "time": datetime.now(timezone.utc).isoformat(),
                     "registers": {
                         key: {
@@ -330,8 +343,154 @@ class HeaterClient:
                     raise
         raise ProtocolError("No state received")
 
+    async def _write_words_confirmed(self, register, words):
+        """One write, explicit ACK, then readback. Never replay an uncertain write."""
+        words = tuple(words)
+        packet = write_words_frame(*register, words)
+        await self._request(
+            packet,
+            lambda reply: reply[1] == 0x04 and (len(reply) == 5 or reply[3:5] == bytes(register)),
+        )
+        actual = await self._read_words(register, len(words))
+        if actual != words:
+            raise ProtocolError(f"Readback mismatch at {register[0]}:{register[1]}; write was not repeated")
+        return actual
+
+    async def _set_clock(self, local_now):
+        operation = {"outcome": "not_sent", "experimental": True, "register": list(CLOCK)}
+        self.clock_operation = operation
+        self.commands.append(operation)
+        try:
+            try:
+                before = await self._read_words(CLOCK, 2)
+                operation["before"] = {"words": list(before), "local_time": decode_clock(before)}
+            except StatusError as err:
+                # This explicit trial is still sent when the candidate cannot be read.
+                operation["before_error"] = str(err)
+            local = local_now()
+            words = encode_clock(local)
+            operation.update(
+                {"time": local.isoformat(), "requested_words": list(words), "outcome": "unconfirmed"}
+            )
+            after = await self._write_words_confirmed(CLOCK, words)
+            operation.update(
+                {
+                    "outcome": "readback_confirmed",
+                    "after": list(after),
+                    "local_time": decode_clock(after),
+                    "rtc_running_verified": False,
+                }
+            )
+            return dict(operation)
+        except (BleakError, TimeoutError, ProtocolError, ValueError) as err:
+            operation["error"] = (
+                str(err) if isinstance(err, (ProtocolError, ValueError)) else type(err).__name__
+            )
+            raise
+
+    async def set_clock(self, local_now):
+        async with self._lock:
+            try:
+                await self._ensure_session()
+                await self._read(MODE)  # Renew a stale session before the trial.
+                return await self._set_clock(local_now)
+            except BaseException:
+                await self._close()
+                raise
+
+    async def _read_region(self, block, parameter, count):
+        words = []
+        for offset in range(0, count, 6):
+            words.extend(await self._read_words((block, parameter + offset), min(6, count - offset)))
+        return words
+
+    async def _capture_schedule(self):
+        result = {"time": datetime.now(timezone.utc).isoformat(), "seasons": [], "errors": {}}
+        self.schedule_capture = result
+        for block in range(21, 26):
+            try:
+                words = await self._read_region(block, 0, 62)
+                value = b"".join(word.to_bytes(2, "big") for word in words).hex().upper()
+                result["seasons"].append({"block": block, "value": value, "decoded": decode_season(value)})
+            except StatusError as err:
+                if err.code not in (1, 0x40):
+                    raise
+                result["errors"][str(block)] = str(err)
+        try:
+            words = await self._read_region(28, 50, 29)
+            result["extra"] = {"block": 28, "parameter": 50, "words": words}
+        except StatusError as err:
+            if err.code not in (1, 0x40):
+                raise
+            result["errors"]["28:50–78"] = str(err)
+        result["complete"] = not result["errors"] and len(result["seasons"]) == 5
+        return result
+
+    async def inspect_schedule(self):
+        async with self._lock:
+            try:
+                await self._ensure_session()
+                return await self._capture_schedule()
+            except BaseException:
+                await self._close()
+                raise
+
+    async def apply_schedule(self, schedule, save_original, *, local_now=None, restoring=False):
+        validate_payloads(schedule)
+        async with self._lock:
+            operation = {
+                "time": datetime.now(timezone.utc).isoformat(),
+                "outcome": "not_sent",
+                "experimental": True,
+                "restoring": restoring,
+                "confirmed_chunks": 0,
+                "activation_verified": False,
+                "preference": schedule.get("preference"),
+            }
+            self.schedule_operation = operation
+            self.commands.append(operation)
+            try:
+                await self._ensure_session()
+                original = await self._capture_schedule()
+                if not original["complete"]:
+                    raise ProtocolError(
+                        "Could not read the full existing schedule; see schedule_capture in diagnostics"
+                    )
+                await save_original(original)
+                if local_now is not None:
+                    await self._set_clock(local_now)
+                operation["outcome"] = "partial_or_unconfirmed"
+                extra = schedule["extra"]
+                # Holiday rules and preference/threshold/lead-time data first.
+                for offset in range(0, 29, 6):
+                    register = (28, 50 + offset)
+                    operation["last_register"] = list(register)
+                    await self._write_words_confirmed(register, extra["words"][offset : offset + 6])
+                    operation["confirmed_chunks"] += 1
+                for block in schedule["seasons"]:
+                    words = season_words(block)
+                    # Header, then all twenty event slots. Include the app builder's omitted tail.
+                    for start, count in [(0, 2)] + [(i, 6) for i in range(2, 62, 6)]:
+                        register = (block["block"], start)
+                        operation["last_register"] = list(register)
+                        await self._write_words_confirmed(register, words[start : start + count])
+                        operation["confirmed_chunks"] += 1
+                    checksum = await self._read((block["block"], 62))
+                    operation.setdefault("season_check_words", {})[str(block["block"])] = checksum
+                operation["outcome"] = "readback_confirmed"
+                return dict(operation)
+            except (BleakError, TimeoutError, ProtocolError, ValueError) as err:
+                operation["error"] = (
+                    str(err) if isinstance(err, (ProtocolError, ValueError)) else type(err).__name__
+                )
+                await self._close()
+                raise
+            except BaseException:
+                await self._close()
+                raise
+
     async def test_energy_preference(self, value: int, save_original, *, restoring=False):
-        """Try only the app's BLE candidate; one write, never automatic fallback.
+        """Try the readable contiguous candidate; one write, no address fallback.
 
         save_original is awaited before transmission so the pre-test value is
         durable even after a restart or an ambiguous write result. Readback is

@@ -5,6 +5,10 @@ Scope: iCOMM 14.1.0 APK, current official HA integration and py-aosmith,
 the HPS10-80H45DV product-linked owner's manual, and prior redacted BLE results.
 No hardware settings were changed during this research.
 
+**Historical research log:** the early scope decisions below describe earlier
+versions. Version 1.3.0 restores tariff lookup/upload and adds the owner's
+authorized clock trial; see the final section and README.md for current behavior.
+
 ## Practical findings
 
 | Feature | Does this integration need to set the heater's calendar clock? | Evidence / remaining limit |
@@ -18,7 +22,8 @@ No hardware settings were changed during this research.
 
 The previous project-wide clock blocker was too broad. It belongs to reliable
 offline **heater-owned scheduling**, not to completion of basic local control.
-No clock button should be added until its next-generation protocol is identified.
+At that stage a clock button was deferred pending identification of the
+next-generation protocol. The later owner-authorized trial is recorded below.
 
 ## Maximum temperature: product capability versus remote allowance
 
@@ -431,3 +436,40 @@ The detailed report also records a bytecode-confirmed apparent tail omission
 in the app's BLE season frame builder, the limits of clock/DST evidence, and
 what can be learned before sniffing traffic. No production integration code,
 version, or heater settings changed in this follow-up.
+
+## Owner-authorized clock and tariff trials — version 1.3.0
+
+The October 5 23:18:56 UTC diagnostic dump, running integration 1.2.0 on HA
+2026.9.4, reads 28:75 as `0000` and receives status 0x40 for 28:113. Request and
+response CRCs are valid in both transactions (exact frames in PROTOCOL.md).
+The screenshot's failed preference selection occurred later and is not logged
+in this dump. Status 0x40 alone therefore does not establish a faulty write CRC.
+The rejected read stopped the extended scan before its clock candidates.
+
+Version 1.3.0 continues optional scans past status 1/0x40 and reports completion,
+including successful/rejected/unread counts. The word-only preference trial now
+targets the readable 28:75 candidate explicitly, without address fallback. Its
+backup uses a new key so an old 28:113 backup cannot be restored into 28:75.
+
+The owner authorized trying the known clock constructor despite unresolved
+profile applicability. The clock action uses HA's configured timezone and writes
+26:3–4 once, checking ACK/readback. It still sends the explicit trial if an initial
+read is rejected. This records a testable result; it does not establish ticking,
+DST behavior or a next-generation onboarding clock source in advance.
+
+The anonymous tariff service code was recovered from the earlier implementation:
+`utilitiesForZipcode`, `tariffsForUtility`, and `tariffAndHoliday` at
+`https://r2.wh8.co/graphql`. It returns normalized prices and holiday IDs. The
+restored production generator applies the recovered preference algorithm and
+holiday rules; the upload writes five season blocks and 28:50–78. Full original
+data must be saved and verified on disk first. Every chunk requires matching
+readback, and failed/ambiguous writes are not replayed. The writer deliberately
+includes all twenty event slots instead of copying the app's apparent tail
+omission. The parameter-62 read remains; its activation semantics are unknown.
+
+With a cached tariff, a preference change rebuilds the entire schedule, as the
+app's traced handler does. Without one, the selector remains a word-only trial.
+The original schedule survives HA restarts and has a separate restore control.
+API access was unavailable from the workspace, so current server data has not
+been substituted with the illustrative Rate 195 fixture. Live lookup will run
+from HA. No physical writes were performed from this development environment.
