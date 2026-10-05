@@ -1,21 +1,16 @@
-## AO Smith Local BLE 1.1.1
+## AO Smith Local BLE 1.1.2
 
-Correct the HPS10 hot-water availability mapping:
+This diagnostic update prepares energy-usage preference support. **It does not
+add an energy-preference control yet.** The APK's Bluetooth and Wi-Fi paths use
+different addresses for newer heaters, so a hardware comparison is required.
 
-| Raw value | Category | Display |
-|---|---|---|
-| 10 | High | 100% |
-| 5 | Medium | 50% |
-| 0 | Low | 0% |
+The existing disabled-by-default **Inspect extended registers** button now reads
+both candidate addresses and includes their raw values or errors in diagnostics.
+There are no new entities, configuration options, automatic polls or writes.
 
-This applies the owner's specified mapping after raw 10 appeared in two valid
-Bluetooth responses. It replaces the earlier interpretation based on readings
-at different times. Unknown codes still display Unknown. Low availability is
-not a heater fault, and these percentages do not measure remaining tank volume.
+Update in HACS and restart Home Assistant. For the next check, inspect/download
+diagnostics before and after changing the preference in the official iCOMM app,
+and report both option labels. See the README for connection instructions.
 
-Update in HACS and restart Home Assistant. No configuration changes or re-pairing
-are needed. Existing entity IDs and raw diagnostic values are preserved; historical
-readings are not rewritten. Temperature, modes, timers and tariff scope are unchanged.
-
-145 automated tests pass locally, including all three captured availability
-frames and their sensor category/display values, plus Ruff and archive checks.
+149 tests, Ruff checks and archive validation pass locally. These checks verify
+read-only capture and error handling, not the candidates' hardware meaning.

@@ -19,7 +19,7 @@ FAULT = (2, 7)
 MIN_TEMP_F = 95
 MAX_TEMP_F = 150
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 DEFAULT_MODE_DAYS = {2: 7, 3: 1}
 
 
@@ -55,7 +55,14 @@ OPTIONAL_REGISTERS = {
     "electric_days": ELECTRIC_DAYS,
 }
 # Read-only capture; grid energy units and clock mapping remain unverified.
+# APK TOU paths disagree on the next-generation preference offset. Inspect only;
+# neither a matching numeric value nor successful read proves the register meaning.
+ENERGY_PREFERENCE_CANDIDATES = {
+    "energy_preference_candidate_contiguous": (28, 75),
+    "energy_preference_candidate_ble": (28, 113),
+}
 INSPECT_REGISTERS = {
+    **ENERGY_PREFERENCE_CANDIDATES,
     "clock_candidate_low": (26, 3),
     "clock_candidate_high": (26, 4),
     **OPTIONAL_REGISTERS,

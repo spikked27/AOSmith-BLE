@@ -38,3 +38,7 @@ A passing simulated peripheral test checks our encoding and recovery; it does
 not prove that an optional feature exists on a particular heater. Contributions
 should include model, firmware, redacted captures and expected physical behavior.
 Never submit a pairing identifier, PIN, APK, account token or Wi-Fi credentials.
+
+Energy usage preference control remains pending: iCOMM's next-generation BLE
+and Wi-Fi paths disagree on its address. Manual Inspect captures both candidates
+in 1.1.2; no preference or tariff writes are exposed. See RESEARCH.md.

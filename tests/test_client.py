@@ -395,3 +395,27 @@ async def test_unknown_availability_keeps_full_word_without_creating_fault(word)
     assert state.fault == 0
     assert decode_availability(state.availability) is None
     await client.disconnect()
+
+
+@pytest.mark.parametrize("raw", [0, 1, 2, 65535])
+async def test_preference_inspect_preserves_candidates_without_writing(client, peripheral, raw):
+    from custom_components.aosmith_ble.const import ENERGY_PREFERENCE_CANDIDATES
+
+    # The APK's two paths disagree: preserve both raw words, never infer a setting.
+    peripheral.registers[(28, 75)] = raw
+    before = dict(peripheral.registers)
+    result = await client.inspect_registers(ENERGY_PREFERENCE_CANDIDATES)
+    contiguous = result["registers"]["energy_preference_candidate_contiguous"]
+    ble = result["registers"]["energy_preference_candidate_ble"]
+    assert contiguous["raw"] == raw
+    assert contiguous["hex"] == f"{raw:04X}"
+    assert ble["raw"] is None
+    assert ble["error"] is not None
+    assert peripheral.registers == before
+    assert not any(p[1] == 0x40 for p in peripheral.writes)
+    assert client.optional_registers == {}
+    assert (await client.read_state()).mode == 4
+    # A subsequent manual inspection retries a previously unsupported candidate.
+    peripheral.registers[(28, 113)] = 2
+    result = await client.inspect_registers(ENERGY_PREFERENCE_CANDIDATES)
+    assert result["registers"]["energy_preference_candidate_ble"]["raw"] == 2

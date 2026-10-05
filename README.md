@@ -149,6 +149,33 @@ require cloud access; keeping a utility plan current may require reconnecting
 through the official app. We have not verified whether iCOMM refreshes existing
 plans automatically or requires reapplying them.
 
+### Energy usage preferences
+
+The iCOMM choices **More Hot Water**, **More Savings**, and **Most Savings**
+control how the heater uses energy across an existing rate plan. They are
+separate from Hybrid/Heat pump/Electric operating modes. The app warns that
+Most Savings may leave insufficient hot water.
+
+Preference control is **not yet available in this integration**: the APK uses
+conflicting register addresses for newer heaters. Version 1.1.2 adds a targeted
+read-only capture to the existing **Inspect extended registers** button to
+resolve this. To contribute a comparison:
+
+1. Update and restart Home Assistant. Enable **Inspect extended registers** on
+   the device page if it is disabled.
+2. Press it, wait for the action to finish, and download integration diagnostics.
+   Note the preference currently shown in iCOMM.
+3. Change the preference in iCOMM (for example, Most Savings to More Hot Water)
+   and wait for the app to confirm it was applied. Inspect again and download
+   a second diagnostics file, noting the new preference.
+
+If iCOMM needs a Bluetooth connection, temporarily disable the HA integration
+while using it, then re-enable HA before the second capture. Use the official
+app's supported setup/connection flow if it requires Internet access. Inspection
+makes no heater-setting changes, adds no entities, and is not part of regular
+polling. A matching read alone does not prove a writable preference control;
+we will verify a single-setting write separately before exposing it.
+
 ## Configuration
 
 **Settings → Devices & services → AO Smith Local BLE → Configure** offers:

@@ -1,7 +1,7 @@
-# Version 1.1.1 validation
+# Version 1.1.2 validation
 
-Reviewed September 29, 2026. Local environment: Python 3.13.15 and Home Assistant
-2025.12.5 with its Bluetooth/USB dependencies. **145 automated tests pass locally**, with Ruff lint and formatting checks passing.
+Reviewed October 5, 2026. Local environment: Python 3.13.15 and Home Assistant
+2025.12.5 with its Bluetooth/USB dependencies. **149 automated tests pass locally**, with Ruff lint and formatting checks passing.
 Automated checks use captured
 protocol fixtures and a simulated peripheral, not physical Bluetooth. See the
 GitHub Tests workflow for the release commit's results.
@@ -64,3 +64,9 @@ No verified next-generation clock writer is exposed. Clock fault 42 reports an
 unset clock, not its accuracy or timezone. Utility setup remains in the official
 app, and heater-owned offline TOU timing is not guaranteed. Repeated zero clock
 candidate reads have not established their meaning; no repeat is requested.
+
+
+Energy-preference capture tests preserve raw 0/1/2/65535, report unsupported
+candidates without inventing zero, retry on manual inspection, leave core
+readings usable, and issue no register writes. Physical identification and
+preference-only activation remain pending; no writable select is exposed.
