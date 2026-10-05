@@ -1,3 +1,11 @@
+# 1.1.2 — October 5, 2026
+
+- Add two read-only energy-preference candidates to the existing manual Inspect
+  capture, to resolve conflicting next-generation APK register addresses.
+- Document the three app preferences, distinct wire/cloud encodings, and the
+  before/after capture needed before a writable control can be implemented.
+- No new entities, options, automatic reads, or heater-setting writes.
+
 # 1.1.1 — September 29, 2026
 
 - Correct HPS10 hot-water availability to raw 10 = High/100%, 5 = Medium/50%,

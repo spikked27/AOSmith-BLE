@@ -93,7 +93,9 @@ slots: hour, minute, unused byte, day-of-week mask, mode, mode-data. Another pat
 chunks writes into an initial two-register write and subsequent six-register
 writes, then reads parameter 0x3E. Holiday data and time/preference setup are
 separate. Commit/checksum behavior and next-generation clock/preference addresses
-still require validation. Older-family addresses must not be reused on HPS10.
+still require validation. The two concrete preference candidates and their
+conflicting APK paths are documented in RESEARCH.md. Inspect reads 28:75 and
+28:113 without interpreting or writing them. Older-family addresses must not be reused on HPS10.
 
 The app also fetches tariff metadata from GraphQL and energy history from
 `getEnergyUseData` (average, dated kWh, lifetimeKwh). A local energy word is not

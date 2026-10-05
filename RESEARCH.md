@@ -256,3 +256,45 @@ are captured, while their categorical interpretation is not an independently
 confirmed APK enum. Unknown values remain unknown, and Low does not set Error
 status. Neither -5 nor 251 is assigned an availability category. Additional
 comparisons may refine the interpretation; the raw data is preserved.
+
+
+## Energy usage preference investigation — October 5, 2026
+
+The iCOMM 14.1.0 APK labels three slider positions **More Hot Water**, **More
+Savings**, and **Most Savings**. Its Most Savings confirmation explicitly warns
+that this preference may cause the user to run out of hot water. The explanatory
+text ties the preference to energy use during different periods of a rate plan.
+This supports a possible explanation for insufficient recovery during an
+expensive period; it does not establish the cause of any particular shortage.
+
+The wire encoding differs from the cloud enum:
+
+| App option | Slider | BLE serialized word | Cloud enum |
+|---|---|---|---|
+| More Hot Water | 0 | 1 | 1 |
+| More Savings | 0.5 | 0 | 2 |
+| Most Savings | 1 | 2 | 3 |
+
+Module 1417's `convertUserPref` and serializer #14688 establish the wire words.
+Module 1402's `USER_PREFERENCE` defines the separate cloud values. Do not send
+cloud enum 3 to mean Most Savings over BLE.
+
+**The next-generation address is unresolved.** Bytecode #14581
+`getBlockAndIndex` selects block 0x1C (28), holiday start 0x32 (50) for profiles
+other than the older `heatPump`. #14589 `getHolidayData` appends four extra words
+to 25 holiday words: this puts the preference at 28:75 (0x1C:0x4B) in the
+contiguous Wi-Fi payload. In contrast, Bluetooth #14586/#14587/#14588 appends
+`formatExtraData` (#14591) items and uses each item's explicit parameter index;
+that preference index is 113 (0x71), yielding 28:113. The next-generation module
+1422 declares block 28 length 112, another reason not to assume 113 is valid.
+The older named `setUserEnergyPreference` (#14614) writes 27:113; that is not a
+verified HPS10 command and is not used here.
+
+Version 1.1.2 adds **read-only** manual inspection of 28:75 and 28:113. These are
+candidates, not exposed controls or decoded state. Normal polling is unchanged.
+Capture before and after changing the preference in iCOMM, recording the exact
+labels and waiting for the app to confirm application. A correlated change
+would identify the storage candidate; a narrowly scoped BLE write with readback
+and official-app verification must then establish whether preference-only
+updates take effect without the app's full tariff re-upload/activation sequence.
+No tariff, holiday, threshold, clock or enrollment writes are introduced.
