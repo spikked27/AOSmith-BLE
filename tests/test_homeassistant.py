@@ -23,6 +23,12 @@ def coordinator():
         data=HeaterState(125, 4, 5, 0),
         last_update_success=True,
         options={},
+        tariff_plan=None,
+        tariff_preference=None,
+        tariff_busy=False,
+        tariff_status="Not configured",
+        tariff_state={},
+        async_set_energy_preference=AsyncMock(),
         async_set_value=AsyncMock(),
     )
 
@@ -247,7 +253,11 @@ async def test_core_energy_read_is_always_enabled(tmp_path):
     )
     with patch("custom_components.aosmith_ble.coordinator.make_client", return_value=client):
         HeaterCoordinator(hass, entry)
-    assert client.optional_registers == {"energy_wh": ENERGY}
+    assert client.optional_registers == {
+        "energy_wh": ENERGY,
+        "hot_water_plus": (11, 20),
+        "energy_preference_experimental": (28, 75),
+    }
     await hass.async_stop()
 
 
@@ -305,7 +315,7 @@ async def test_optional_entities_handle_missing_data_and_exact_values(coordinato
         await boost.async_select_option("Off")
 
 
-async def test_optional_platforms_respect_model_options(tmp_path, coordinator):
+async def test_hot_water_plus_is_detected_without_options(tmp_path, coordinator):
     from custom_components.aosmith_ble import PLATFORMS, select
     from custom_components.aosmith_ble.binary_sensor import FLAGS
 
@@ -314,11 +324,12 @@ async def test_optional_platforms_respect_model_options(tmp_path, coordinator):
     entities = []
     entry = SimpleNamespace(entry_id="test", options={})
     await select.async_setup_entry(hass, entry, entities.extend)
-    assert len(entities) == 1 and entities[0].name == "Vacation/Guest mode"
+    assert len(entities) == 2 and entities[0].name == "Mode duration"
     entities.clear()
-    entry.options = {"enable_hot_water_plus": True}
+    coordinator.data.registers["hot_water_plus"] = 0
     await select.async_setup_entry(hass, entry, entities.extend)
-    assert len(entities) == 2
+    assert len(entities) == 3
+    assert entities[-1].name == "Hot Water Plus"
     assert "switch" not in PLATFORMS and set(FLAGS) == {"fault_present"}
     await hass.async_stop()
 
@@ -567,15 +578,8 @@ async def test_tariff_removed_from_options_and_entity_setup(tmp_path, coordinato
     flow.hass = hass
     with patch.object(OptionsFlow, "config_entry", new_callable=PropertyMock, return_value=entry):
         form = await flow.async_step_init()
-        assert form["type"] == "menu" and "tariff" in form["menu_options"]
-        form = await flow.async_step_settings()
-        result = await flow.async_step_settings({"poll_interval": 60})
-        assert result["data"] == clean_options({"poll_interval": 60})
-        assert {str(key) for key in form["data_schema"].schema} == {
-            "poll_interval",
-            "enable_hot_water_plus",
-            "enable_experimental_energy_preference",
-        }
+        assert form["type"] == "form" and form["step_id"] == "tariff"
+        assert {str(key) for key in form["data_schema"].schema} == {"zipcode"}
     await hass.async_stop()
 
 
@@ -684,9 +688,15 @@ async def test_release_entities_are_minimal_with_opt_in_debug(tmp_path, coordina
         await platform.async_setup_entry(hass, entry, entities.extend)
     normal = [e for e in entities if e.entity_registry_enabled_default]
     debug = [e for e in entities if not e.entity_registry_enabled_default]
-    assert len(normal) == 9 and len(debug) == 4
-    assert sum(e.entity_category is None for e in normal) == 5
-    assert {e.action for e in debug} == {"refresh", "reconnect", "inspect", "inspect_schedule"}
+    assert len(normal) == 8 and len(debug) == 6
+    assert sum(e.entity_category is None for e in normal) == 7
+    assert {e.action for e in debug if isinstance(e, button.DebugButton)} == {
+        "refresh",
+        "reconnect",
+        "inspect",
+        "inspect_schedule",
+    }
+    assert not any("Restore" in (e.name or "") or "experimental" in (e.name or "") for e in entities)
     await hass.async_stop()
 
 
@@ -730,9 +740,9 @@ async def test_debug_default_migration_runs_once_and_preserves_pairing(tmp_path)
             "button.refresh", disabled_by=er.RegistryEntryDisabler.INTEGRATION
         )
         config_entries.async_update_entry.assert_called_once_with(
-            entry, minor_version=2, options=clean_options({})
+            entry, minor_version=3, options=clean_options({})
         )
-        entry.minor_version = 2  # User can now re-enable the button permanently.
+        entry.minor_version = 3  # User can now re-enable the button permanently.
         registry.reset_mock()
         assert await async_migrate_entry(hass, entry)
         registry.async_update_entity.assert_not_called()
@@ -740,28 +750,28 @@ async def test_debug_default_migration_runs_once_and_preserves_pairing(tmp_path)
     await hass.async_stop()
 
 
-async def test_experimental_preference_opt_in_entities(coordinator):
+async def test_public_savings_control_uses_cached_schedule_and_has_no_restore(coordinator):
     from custom_components.aosmith_ble import button, select
-    from custom_components.aosmith_ble.const import CONF_ENERGY_PREFERENCE
 
     hass = SimpleNamespace(data={DOMAIN: {"test": coordinator}})
-    entry = SimpleNamespace(entry_id="test", options={CONF_ENERGY_PREFERENCE: True})
-    coordinator.preference_backup = {"register": [28, 75], "value": 2}
-    coordinator.async_test_energy_preference = AsyncMock()
-    coordinator.data = HeaterState(125, 4, 5, 0, registers={"energy_preference_experimental": 1})
+    entry = SimpleNamespace(entry_id="test", options={})
+    coordinator.tariff_plan = {"schema_version": 1}
+    coordinator.tariff_preference = "More Hot Water"
     entities = []
     await select.async_setup_entry(hass, entry, entities.extend)
-    control = next(e for e in entities if isinstance(e, select.ExperimentalEnergyPreference))
-    assert control.current_option == "More Hot Water"
-    assert control.extra_state_attributes["behavior_verified"] is False
+    control = next(e for e in entities if isinstance(e, select.SavingsPreference))
+    assert control.current_option == "More Hot Water" and control.available
+    assert control.unique_id.endswith("_energy_preference_experimental")
     await control.async_select_option("More Savings")
-    coordinator.async_test_energy_preference.assert_awaited_once_with("More Savings")
+    coordinator.async_set_energy_preference.assert_awaited_once_with("More Savings")
+    coordinator.tariff_busy = True
+    assert not control.available
+    coordinator.tariff_busy = False
+    coordinator.tariff_plan = None
+    assert not control.available
     entities = []
     await button.async_setup_entry(hass, entry, entities.extend)
-    restore = next(e for e in entities if isinstance(e, button.RestoreEnergyPreference))
-    assert restore.available
-    await restore.async_press()
-    coordinator.async_test_energy_preference.assert_awaited_with(restore=True)
+    assert not any("restore" in e.unique_id for e in entities)
 
 
 async def test_preference_backup_survives_coordinator_restart(tmp_path):
@@ -800,4 +810,62 @@ async def test_preference_backup_survives_coordinator_restart(tmp_path):
         with pytest.raises(HomeAssistantError, match="Enable"):
             await restarted.async_test_energy_preference("More Hot Water")
         assert len(calls) == 3
+    await hass.async_stop()
+
+
+async def test_electric_duration_uses_one_day_default_and_seven_day_limit(coordinator):
+    from custom_components.aosmith_ble.select import VacationGuestDuration
+
+    heater = Heater(coordinator, SimpleNamespace(options={}))
+    await heater.async_set_operation_mode("Electric")
+    coordinator.async_set_value.assert_awaited_once_with(MODE, 0x0101)
+    coordinator.data = HeaterState(125, 1, 5, 0, registers={"electric_days": 3})
+    duration = VacationGuestDuration(coordinator)
+    assert duration.current_option == "3 days"
+    assert duration.options == ["Off", "1 day", "2 days", "3 days", "4 days", "5 days", "6 days", "7 days"]
+    await duration.async_select_option("7 days")
+    coordinator.async_set_value.assert_awaited_with(MODE, 0x0701, expected_mode=1)
+    await duration.async_select_option("Off")
+    coordinator.async_set_value.assert_awaited_with(MODE, 4, expected_mode=1)
+
+
+async def test_v2_migration_preserves_enabled_inspection_and_tariff(tmp_path):
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.aosmith_ble import async_migrate_entry
+
+    hass = HomeAssistant(str(tmp_path))
+    options = {"tariff": {"schema_version": 1, "tariff_name": "194"}, "tariff_preference": "More Savings"}
+    entry = SimpleNamespace(entry_id="test", version=1, minor_version=2, options=options)
+    entities = [
+        SimpleNamespace(
+            platform=DOMAIN,
+            domain=domain,
+            unique_id="address_" + key,
+            entity_id=domain + "." + key,
+            disabled_by=None,
+        )
+        for domain, key in [
+            ("button", "inspect"),
+            ("sensor", "integration_version"),
+            ("sensor", "diagnostic_read_status"),
+            ("select", "energy_preference_experimental"),
+        ]
+    ]
+    registry = MagicMock()
+    config_entries = SimpleNamespace(async_update_entry=MagicMock())
+    with (
+        patch.object(er, "async_get", return_value=registry),
+        patch.object(er, "async_entries_for_config_entry", return_value=entities),
+        patch.object(hass, "config_entries", config_entries),
+    ):
+        assert await async_migrate_entry(hass, entry)
+    assert {call.args[0] for call in registry.async_update_entity.call_args_list} == {
+        "sensor.integration_version",
+        "sensor.diagnostic_read_status",
+    }
+    saved = config_entries.async_update_entry.call_args.kwargs
+    assert saved["minor_version"] == 3
+    assert saved["options"]["tariff"] == options["tariff"]
+    assert saved["options"]["tariff_preference"] == "More Savings"
     await hass.async_stop()

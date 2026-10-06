@@ -15,11 +15,8 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
-    CONF_ENERGY_PREFERENCE,
     CONF_IDENTIFIER,
-    CONF_INTERVAL,
     CONF_PIN,
-    DEFAULT_INTERVAL,
     DOMAIN,
     SERVICE_UUID,
     clean_options,
@@ -46,7 +43,7 @@ def is_heater(info):
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
-    MINOR_VERSION = 2
+    MINOR_VERSION = 3
 
     def __init__(self):
         self._address = ""
@@ -237,40 +234,15 @@ class OptionsFlow(config_entries.OptionsFlow):
         return self.async_create_entry(title="", data=options)
 
     async def async_step_init(self, user_input=None):
-        # Explicit labels also render when the frontend has stale/missing translations.
-        return self.async_show_menu(
-            step_id="init",
-            menu_options={
-                "settings": "Controls and readings",
-                "tariff": "Find and apply a tariff",
-                "remove_tariff": "Forget cached tariff",
-            },
-        )
+        coordinator = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
+        if coordinator and coordinator.tariff_preference:
+            self._preference = coordinator.tariff_preference
+        else:
+            self._preference = self.config_entry.options.get("tariff_preference", "More Hot Water")
+        return await self.async_step_tariff(user_input)
 
     def _lookup(self):
         return TariffLookup(async_get_clientsession(self.hass))
-
-    async def async_step_settings(self, user_input=None):
-        if user_input is not None:
-            return self._save(user_input)
-        return self.async_show_form(
-            step_id="settings",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_INTERVAL, default=self.config_entry.options.get(CONF_INTERVAL, DEFAULT_INTERVAL)
-                    ): vol.All(vol.Coerce(int), vol.Range(min=15, max=300)),
-                    vol.Required(
-                        "enable_hot_water_plus",
-                        default=self.config_entry.options.get("enable_hot_water_plus", False),
-                    ): bool,
-                    vol.Required(
-                        CONF_ENERGY_PREFERENCE,
-                        default=self.config_entry.options.get(CONF_ENERGY_PREFERENCE, False),
-                    ): bool,
-                }
-            ),
-        )
 
     async def async_step_tariff(self, user_input=None):
         errors = {}
@@ -342,7 +314,6 @@ class OptionsFlow(config_entries.OptionsFlow):
             errors["base"] = "tariff_apply_failed"
         if user_input is not None:
             self._preference = user_input["preference"]
-            self._sync_clock = user_input["sync_clock"]
             self._upload_task = None
             self._upload_error = None
             self._upload_result = None
@@ -352,13 +323,11 @@ class OptionsFlow(config_entries.OptionsFlow):
             data_schema=vol.Schema(
                 {
                     vol.Required("preference", default=self._preference): vol.In(list(PREFERENCES)),
-                    vol.Required("sync_clock", default=self._sync_clock): bool,
                 }
             ),
             description_placeholders={
                 "utility": self._candidate["utility_name"],
                 "tariff": self._candidate["tariff_name"],
-                "events": str(len(self._candidate["touEvents"])),
                 "detail": detail,
             },
             errors=errors,
@@ -392,7 +361,7 @@ class OptionsFlow(config_entries.OptionsFlow):
         except asyncio.CancelledError:
             self._upload_error = (
                 "Tariff upload was interrupted. No writes were repeated. "
-                "Download diagnostics before deciding whether to apply or restore the schedule."
+                "Check the connection and apply the tariff again."
             )
         except (HomeAssistantError, TariffError, ValueError) as err:
             self._upload_error = str(err) or type(err).__name__
@@ -414,12 +383,5 @@ class OptionsFlow(config_entries.OptionsFlow):
             {
                 "tariff": self._candidate,
                 "tariff_preference": self._preference,
-                "tariff_sync_clock": self._sync_clock,
-                CONF_ENERGY_PREFERENCE: True,
             }
         )
-
-    async def async_step_remove_tariff(self, user_input=None):
-        if user_input is not None:
-            return self._save({"tariff": None})
-        return self.async_show_form(step_id="remove_tariff", data_schema=vol.Schema({}))

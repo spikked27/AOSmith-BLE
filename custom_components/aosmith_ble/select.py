@@ -1,16 +1,15 @@
-"""Vacation/Guest duration control and optional Hot Water Plus."""
+"""Savings, timed modes and supported Hot Water Plus controls."""
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
-    CONF_ENERGY_PREFERENCE,
     DOMAIN,
-    ENERGY_PREFERENCE,
     ENERGY_PREFERENCES,
     HOT_WATER_PLUS,
     MODE,
     MODE_NAMES,
+    TIMED_MODE_REGISTERS,
 )
 from .entity import HeaterEntity
 from .protocol import encode_timed_mode
@@ -18,19 +17,17 @@ from .protocol import encode_timed_mode
 
 async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    entities = [VacationGuestDuration(coordinator)]
-    if entry.options.get("enable_hot_water_plus", False):
+    entities = [VacationGuestDuration(coordinator), SavingsPreference(coordinator)]
+    if coordinator.data.registers.get("hot_water_plus") in range(4):
         entities.append(HotWaterPlus(coordinator))
-    if entry.options.get(CONF_ENERGY_PREFERENCE, False):
-        entities.append(ExperimentalEnergyPreference(coordinator))
     async_add_entities(entities)
 
 
-class ExperimentalEnergyPreference(HeaterEntity, SelectEntity):
-    """App-derived candidate, explicitly not a verified behavioral control."""
+class SavingsPreference(HeaterEntity, SelectEntity):
+    """Apply the selected preference to the entire configured tariff schedule."""
 
-    _attr_name = "Energy preference (experimental)"
-    _attr_icon = "mdi:water-boiler"
+    _attr_name = "Savings preference"
+    _attr_icon = "mdi:piggy-bank-outline"
     _attr_options = list(ENERGY_PREFERENCES)
 
     def __init__(self, coordinator):
@@ -38,26 +35,20 @@ class ExperimentalEnergyPreference(HeaterEntity, SelectEntity):
 
     @property
     def current_option(self):
-        raw = self.coordinator.data.registers.get("energy_preference_experimental")
-        return next((name for name, value in ENERGY_PREFERENCES.items() if value == raw), None)
+        return self.coordinator.tariff_preference
 
     @property
-    def extra_state_attributes(self):
-        return {
-            "behavior_verified": False,
-            "rebuilds_saved_tariff": bool(self.coordinator.options.get("tariff")),
-            "register": list(ENERGY_PREFERENCE),
-            "original_value": (self.coordinator.preference_backup or {}).get("value"),
-        }
+    def available(self):
+        return super().available and bool(self.coordinator.tariff_plan) and not self.coordinator.tariff_busy
 
     async def async_select_option(self, option):
-        await self.coordinator.async_test_energy_preference(option)
+        await self.coordinator.async_set_energy_preference(option)
 
 
 class VacationGuestDuration(HeaterEntity, SelectEntity):
-    """Adjust the active Vacation/Guest countdown; other modes display Off."""
+    """Adjust the active Electric, Vacation or Guest countdown."""
 
-    _attr_name = "Vacation/Guest mode"
+    _attr_name = "Mode duration"
     _attr_icon = "mdi:calendar-clock"
 
     def __init__(self, coordinator):
@@ -67,7 +58,7 @@ class VacationGuestDuration(HeaterEntity, SelectEntity):
     @property
     def options(self):
         mode = self.coordinator.data.mode
-        if mode not in (2, 3):
+        if mode not in TIMED_MODE_REGISTERS:
             return ["Off"]
         maximum = 99 if mode == 2 else 7
         return (
@@ -79,9 +70,9 @@ class VacationGuestDuration(HeaterEntity, SelectEntity):
     @property
     def current_option(self):
         state = self.coordinator.data
-        if state.mode not in (2, 3):
+        if state.mode not in TIMED_MODE_REGISTERS:
             return "Off"
-        key = "vacation_days" if state.mode == 2 else "guest_days"
+        key, _register = TIMED_MODE_REGISTERS[state.mode]
         raw = state.registers.get(key)
         days = (raw & 0xFF) if raw is not None else state.mode_days
         if state.mode == 2 and days == 100:
@@ -93,16 +84,14 @@ class VacationGuestDuration(HeaterEntity, SelectEntity):
     def extra_state_attributes(self):
         return {
             "active_mode": MODE_NAMES.get(self.coordinator.data.mode),
-            "behavior": "Select Vacation or Guest on the water heater, then adjust its days here",
-            "exit_mode": "Hybrid",
         }
 
     async def async_select_option(self, option):
         if not self.available or option not in self.options:
-            raise HomeAssistantError("Select Vacation or Guest on the water heater before adjusting its days")
+            raise HomeAssistantError("Select Electric, Vacation or Guest before adjusting its duration")
         mode = self.coordinator.data.mode
         if option == "Off":
-            if mode not in (2, 3):
+            if mode not in TIMED_MODE_REGISTERS:
                 return
             value = 4
         else:

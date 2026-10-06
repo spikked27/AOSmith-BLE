@@ -371,7 +371,6 @@ class HeaterClient:
         operation = {
             "started_at": datetime.now(timezone.utc).isoformat(),
             "outcome": "not_sent",
-            "experimental": True,
             "register": list(CLOCK),
             "traffic": [],
         }
@@ -389,10 +388,27 @@ class HeaterClient:
             operation.update(
                 {"time": local.isoformat(), "requested_words": list(words), "outcome": "unconfirmed"}
             )
-            after = await self._write_words_confirmed(CLOCK, words, record=operation)
+            try:
+                after = await self._write_words_confirmed(CLOCK, words, record=operation)
+                scope = "full"
+            except ProtocolError:
+                detail = operation.get("last_write", {})
+                after = detail.get("after", [])
+                # HPS10 returns a zero minute byte even after acknowledging a clock write.
+                # Accept only that observed shape, with a real success ACK and matching date/hour.
+                if not (
+                    detail.get("ack", "").startswith("DB")
+                    and len(after) == 2
+                    and after[0] == (words[0] & 0xFF)
+                    and after[1] == words[1]
+                ):
+                    raise
+                scope = "date_and_hour"
             operation.update(
                 {
-                    "outcome": "readback_confirmed",
+                    "outcome": "readback_confirmed" if scope == "full" else "acknowledged",
+                    "readback_scope": scope,
+                    "minute_verified": scope == "full",
                     "after": list(after),
                     "local_time": decode_clock(after),
                     "rtc_running_verified": False,

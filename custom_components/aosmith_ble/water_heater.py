@@ -46,6 +46,7 @@ class Heater(HeaterEntity, WaterHeaterEntity):
             raise HomeAssistantError("Unsupported mode")
         # Custom duration is available on the device page and through our action.
         value = {
+            "Electric": encode_timed_mode("Electric", DEFAULT_MODE_DAYS[1]),
             "Vacation": encode_timed_mode("Vacation", DEFAULT_MODE_DAYS[2]),
             "Guest": encode_timed_mode("Guest", DEFAULT_MODE_DAYS[3]),
         }.get(operation_mode, MODES[operation_mode])
@@ -61,11 +62,3 @@ class Heater(HeaterEntity, WaterHeaterEntity):
         if not MIN_TEMP_F <= temperature <= self.max_temp:
             raise HomeAssistantError(f"Choose a temperature from {MIN_TEMP_F} to {self.max_temp} °F.")
         await self.coordinator.async_set_value(SETPOINT, encode_temperature(temperature))
-
-    @property
-    def extra_state_attributes(self):
-        return {
-            "vacation_default_days": DEFAULT_MODE_DAYS[2],
-            "guest_default_days": DEFAULT_MODE_DAYS[3],
-            "duration_control": "Vacation/Guest mode",
-        }

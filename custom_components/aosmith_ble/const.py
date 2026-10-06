@@ -19,26 +19,21 @@ FAULT = (2, 7)
 MIN_TEMP_F = 95
 MAX_TEMP_F = 150
 
-VERSION = "1.3.1"
+VERSION = "2.0.0"
 CONF_ENERGY_PREFERENCE = "enable_experimental_energy_preference"
 ENERGY_PREFERENCE = (28, 75)
 CLOCK = (26, 3)
 ENERGY_PREFERENCES = {"More Hot Water": 1, "More Savings": 0, "Most Savings": 2}
-DEFAULT_MODE_DAYS = {2: 7, 3: 1}
+DEFAULT_MODE_DAYS = {1: 1, 2: 7, 3: 1}
 
 
 def clean_options(options):
     """Keep supported controls and a deliberately selected cached rate plan."""
-    result = {
-        CONF_INTERVAL: options.get(CONF_INTERVAL, DEFAULT_INTERVAL),
-        "enable_hot_water_plus": options.get("enable_hot_water_plus", False),
-        CONF_ENERGY_PREFERENCE: options.get(CONF_ENERGY_PREFERENCE, False),
-    }
+    result = {CONF_INTERVAL: options.get(CONF_INTERVAL, DEFAULT_INTERVAL)}
     tariff = options.get("tariff")
     if isinstance(tariff, dict) and tariff.get("schema_version") == 1:
         result["tariff"] = tariff
         result["tariff_preference"] = options.get("tariff_preference", "More Hot Water")
-        result["tariff_sync_clock"] = options.get("tariff_sync_clock", True)
     return result
 
 

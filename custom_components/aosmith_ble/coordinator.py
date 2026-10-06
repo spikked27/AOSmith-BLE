@@ -83,14 +83,14 @@ class HeaterCoordinator(DataUpdateCoordinator):
         self.preference_backup_loaded = False
         self.tariff_store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.tariff")
         self.tariff_state = None
+        self.tariff_busy = False
+        self._preference_task = None
         self.diagnostic_status = {"status": "Idle"}
         self.installed_version = VERSION
         # Core controls and readings always request their supporting registers.
         self.client.optional_registers["energy_wh"] = ENERGY
-        if entry.options.get("enable_hot_water_plus", False):
-            self.client.optional_registers["hot_water_plus"] = HOT_WATER_PLUS
-        if entry.options.get(CONF_ENERGY_PREFERENCE, False):
-            self.client.optional_registers["energy_preference_experimental"] = ENERGY_PREFERENCE
+        self.client.optional_registers["hot_water_plus"] = HOT_WATER_PLUS
+        self.client.optional_registers["energy_preference_experimental"] = ENERGY_PREFERENCE
         self.address = entry.data[CONF_ADDRESS]
         self.command_lock = asyncio.Lock()
         super().__init__(
@@ -121,6 +121,68 @@ class HeaterCoordinator(DataUpdateCoordinator):
                 return await self.client.read_state()
             except (BleakError, TimeoutError, ProtocolError) as err:
                 raise UpdateFailed(str(err)) from err
+
+    @property
+    def tariff_plan(self):
+        state = self.tariff_state or {}
+        return state.get("applied_plan") or self.options.get("tariff")
+
+    @property
+    def tariff_preference(self):
+        if not self.tariff_plan:
+            return None
+        state = self.tariff_state or {}
+        return state.get("applied_preference", self.options.get("tariff_preference"))
+
+    @property
+    def tariff_status(self):
+        if self.tariff_busy:
+            return "Updating"
+        state = self.tariff_state or {}
+        operation = state.get("last_operation", {})
+        if state.get("schedule_incomplete") or operation.get("outcome") == "partial_or_unconfirmed":
+            return "Update incomplete"
+        return "Configured" if self.tariff_plan else "Not configured"
+
+    async def async_set_energy_preference(self, option):
+        if option not in ENERGY_PREFERENCES:
+            raise HomeAssistantError("Invalid savings preference")
+        if not self.tariff_plan:
+            raise HomeAssistantError("Configure an electricity tariff using the integration settings first")
+        if self.tariff_busy or (self._preference_task and not self._preference_task.done()):
+            raise HomeAssistantError("A tariff update is already running")
+        notification_id = f"{DOMAIN}_{self.entry.entry_id}_tariff"
+
+        async def apply():
+            persistent_notification.async_create(
+                self.hass,
+                f"Applying {option}. This can take several minutes. Keep the heater connected.",
+                title="Updating AO Smith savings preference",
+                notification_id=notification_id,
+            )
+            try:
+                result = await self.async_apply_tariff(self.tariff_plan, option, sync_clock=False)
+            except (HomeAssistantError, asyncio.CancelledError):
+                persistent_notification.async_create(
+                    self.hass,
+                    "The savings preference update did not finish. Check the heater connection and retry.",
+                    title="AO Smith tariff update incomplete",
+                    notification_id=notification_id,
+                )
+                raise
+            persistent_notification.async_create(
+                self.hass,
+                f"{option} is now applied. The complete tariff schedule was read back successfully.",
+                title="AO Smith savings preference updated",
+                notification_id=notification_id,
+            )
+            return result
+
+        self._preference_task = self.entry.async_create_background_task(
+            self.hass, apply(), "aosmith_savings_preference", eager_start=False
+        )
+        # A websocket disconnect must not cancel an in-progress device upload.
+        return await asyncio.shield(self._preference_task)
 
     async def async_test_energy_preference(self, option=None, *, restore=False):
         if not self.options.get(CONF_ENERGY_PREFERENCE, False):
@@ -247,9 +309,22 @@ class HeaterCoordinator(DataUpdateCoordinator):
         return result
 
     async def async_apply_tariff(self, plan=None, preference=None, *, sync_clock=True, restore=False):
+        if self.tariff_busy:
+            raise HomeAssistantError("A tariff update is already running")
+        self.tariff_busy = True
+        self.async_update_listeners()
+        try:
+            return await self._async_apply_tariff(plan, preference, sync_clock=sync_clock, restore=restore)
+        finally:
+            self.tariff_busy = False
+            self.async_update_listeners()
+
+    async def _async_apply_tariff(self, plan, preference, *, sync_clock, restore):
         async with self.command_lock:
             if self.tariff_state is None:
                 self.tariff_state = await self.tariff_store.async_load() or {}
+            if self.tariff_state.get("last_operation", {}).get("outcome") == "partial_or_unconfirmed":
+                self.tariff_state["schedule_incomplete"] = True
             try:
                 self.client.schedule_operation = {
                     "time": self.local_now().isoformat(),
@@ -296,7 +371,15 @@ class HeaterCoordinator(DataUpdateCoordinator):
                     restoring=restore,
                 )
                 if not restore:
-                    # Used by the preference selector until the options flow reloads this entry.
+                    if result.get("outcome") != "readback_confirmed":
+                        raise HomeAssistantError("The heater has not confirmed the tariff upload")
+                    self.tariff_state.update(
+                        {
+                            "applied_plan": plan,
+                            "applied_preference": preference,
+                            "applied_at": self.local_now().isoformat(),
+                        }
+                    )
                     self.options.update({"tariff": plan, "tariff_preference": preference})
             except asyncio.CancelledError:
                 self.client.schedule_operation["interrupted"] = True
@@ -311,6 +394,7 @@ class HeaterCoordinator(DataUpdateCoordinator):
                 ValueError,
                 OSError,
                 KeyError,
+                HomeAssistantError,
             ) as err:
                 self.client.schedule_operation["error"] = (
                     str(err)
@@ -319,6 +403,9 @@ class HeaterCoordinator(DataUpdateCoordinator):
                 )
                 raise HomeAssistantError(str(err)) from err
             finally:
+                outcome = self.client.schedule_operation.get("outcome")
+                if outcome in ("partial_or_unconfirmed", "readback_confirmed"):
+                    self.tariff_state["schedule_incomplete"] = outcome != "readback_confirmed"
                 self.tariff_state["last_operation"] = self.client.schedule_operation
                 self.tariff_state["clock_operation"] = self.client.clock_operation
                 await self.tariff_store.async_save(self.tariff_state)

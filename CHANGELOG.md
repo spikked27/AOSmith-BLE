@@ -1,3 +1,18 @@
+# 2.0.0 — October 5, 2026
+
+- Promote full-schedule savings changes to an everyday control; persist applied
+  plan, preference and completion time separately from pending upload data.
+- Add compact tariff display and explicit updating/incomplete states.
+- Simplify configuration to ZIP, utility, rate and savings preference; synchronize
+  local time automatically when applying a new tariff.
+- Accept the captured zero-minute clock readback only with a positive ACK and
+  matching date/hour; preserve verification scope in diagnostics.
+- Auto-detect Hot Water Plus and expose Electric duration alongside Vacation/Guest.
+- Remove public restore/word-only trial controls and experimental settings;
+  hide diagnostic sensors by default and preserve opted-in diagnostic buttons.
+- Preserve pairing, stable entity IDs, original backups and user settings on upgrade.
+- Add HACS installation/status badges and improve public documentation and issue forms.
+
 # 1.3.1 — October 5, 2026
 
 - Prevent a failed upload from becoming success on repeated options-flow result

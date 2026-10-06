@@ -19,7 +19,7 @@ async def async_get_config_entry_diagnostics(hass, entry):
         "protocol_profile": "next_gen_heat_pump",
         "options": clean_options(entry.options),
         "host_clock": {"utc": dt_util.utcnow().isoformat(), "time_zone": hass.config.time_zone},
-        "clock_sync": "Explicit local-time trial at 26:3–4; readback does not prove RTC ticking or DST behavior",
+        "clock_sync": "Local-time synchronization at 26:3–4; see clock_operation for full/partial readback; RTC ticking and DST are not verified",
         "heater_error": fault_details(coordinator.data.fault)
         if coordinator and coordinator.data and coordinator.last_update_success
         else None,

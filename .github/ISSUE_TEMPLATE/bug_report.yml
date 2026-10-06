@@ -1,0 +1,39 @@
+name: Bug report
+description: Report a problem with AO Smith Local BLE
+title: "[Bug] "
+body:
+  - type: input
+    id: model
+    attributes:
+      label: Heater model and firmware
+      placeholder: HPS10-80H45DV, firmware 6.4
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Home Assistant and integration versions
+    validations:
+      required: true
+  - type: dropdown
+    id: bluetooth
+    attributes:
+      label: Bluetooth connection
+      options:
+        - Local adapter
+        - ESPHome active proxy
+        - Other / unsure
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include what you expected and the steps that reproduce it.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Logs and diagnostics
+      description: Wait for the diagnostic-read completion notification before downloading. Review files for private information; never post your PIN or pairing identifier.

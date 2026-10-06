@@ -44,6 +44,7 @@ async def async_setup_entry(hass, entry):
         "guest_days",
         "electric_days",
         "mode_duration",
+        "restore_energy_preference",
     }
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
         if entity.platform == DOMAIN and any(entity.unique_id.endswith("_" + key) for key in retired):
@@ -98,5 +99,20 @@ async def async_migrate_entry(hass, entry):
                 registry.async_update_entity(
                     entity.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
                 )
-        hass.config_entries.async_update_entry(entry, minor_version=2, options=clean_options(entry.options))
+    if entry.minor_version < 3:
+        registry = er.async_get(hass)
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if (
+                entity.platform == DOMAIN
+                and entity.domain == "sensor"
+                and any(
+                    entity.unique_id.endswith("_" + key)
+                    for key in ("integration_version", "diagnostic_read_status")
+                )
+                and entity.disabled_by is None
+            ):
+                registry.async_update_entity(
+                    entity.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
+                )
+        hass.config_entries.async_update_entry(entry, minor_version=3, options=clean_options(entry.options))
     return True

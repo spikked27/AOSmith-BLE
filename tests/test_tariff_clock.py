@@ -203,9 +203,11 @@ async def test_clock_retains_actual_words_when_minutes_do_not_match():
         await original(uuid, data, response)
 
     peripheral.write_gatt_char = replay_clock
-    with pytest.raises(ProtocolError, match="Readback mismatch"):
-        await client.set_clock(lambda: local)
-    assert client.clock_operation["outcome"] == "unconfirmed"
+    await client.set_clock(lambda: local)
+    assert client.clock_operation["outcome"] == "acknowledged"
+    assert client.clock_operation["readback_scope"] == "date_and_hour"
+    assert client.clock_operation["minute_verified"] is False
+    assert client.clock_operation["rtc_running_verified"] is False
     assert client.clock_operation["requested_words"] == captured["requested_words"]
     assert client.clock_operation["after"] == captured["after_words"]
     assert client.clock_operation["local_time"].endswith("20:00")
@@ -384,13 +386,20 @@ async def test_diagnostic_status_finishes_and_notifies_after_capture(tmp_path, s
     await hass.async_stop()
 
 
-async def test_options_menu_supplies_labels_without_frontend_translation_cache():
-    menu = await OptionsFlow().async_step_init()
-    assert menu["menu_options"] == {
-        "settings": "Controls and readings",
-        "tariff": "Find and apply a tariff",
-        "remove_tariff": "Forget cached tariff",
-    }
+async def test_options_open_tariff_directly_without_experimental_parameters(tmp_path):
+    hass = HomeAssistant(str(tmp_path))
+    flow = OptionsFlow()
+    flow.hass = hass
+    test_entry = entry()
+    with patch.object(OptionsFlow, "config_entry", new_callable=PropertyMock, return_value=test_entry):
+        form = await flow.async_step_init()
+        assert form["step_id"] == "tariff" and form["type"] == "form"
+        flow._candidate = cache_plan(PLAN, "200", "PSEG Long Island", "194", "194 — Time of Use")
+        form = await flow.async_step_tariff_confirm()
+        assert {str(key) for key in form["data_schema"].schema} == {"preference"}
+        assert form["description_placeholders"]["utility"] == "PSEG Long Island"
+        assert flow._sync_clock
+    await hass.async_stop()
 
 
 async def test_upload_task_is_cancelled_on_entry_unload(tmp_path):
@@ -412,7 +421,7 @@ async def test_upload_task_is_cancelled_on_entry_unload(tmp_path):
     hass.data[DOMAIN] = {test_entry.entry_id: SimpleNamespace(async_apply_tariff=upload)}
     try:
         with patch.object(OptionsFlow, "config_entry", new_callable=PropertyMock, return_value=test_entry):
-            await flow.async_step_tariff_confirm({"preference": "More Savings", "sync_clock": False})
+            await flow.async_step_tariff_confirm({"preference": "More Savings"})
             await asyncio.wait_for(started.wait(), 1)
             await asyncio.wait_for(hass.async_block_till_done(), 1)
             await test_entry._async_process_on_unload(hass)
@@ -531,7 +540,7 @@ async def test_tariff_options_use_progress_and_save_only_confirmed_upload(tmp_pa
     test_entry = entry()
     hass.data[DOMAIN] = {test_entry.entry_id: coordinator}
     with patch.object(OptionsFlow, "config_entry", new_callable=PropertyMock, return_value=test_entry):
-        result = await flow.async_step_tariff_confirm({"preference": "More Savings", "sync_clock": True})
+        result = await flow.async_step_tariff_confirm({"preference": "More Savings"})
         assert result["type"] == "progress"
         waiter.set()
         try:
@@ -551,7 +560,7 @@ async def test_tariff_options_use_progress_and_save_only_confirmed_upload(tmp_pa
             assert result["errors"]["base"] == "tariff_apply_failed"
             assert result["description_placeholders"]["detail"] == detail
             coordinator.async_apply_tariff = AsyncMock(return_value={"outcome": "readback_confirmed"})
-            await flow.async_step_tariff_confirm({"preference": "More Hot Water", "sync_clock": False})
+            await flow.async_step_tariff_confirm({"preference": "More Hot Water"})
             await flow._upload_task
             await flow.async_step_tariff_apply()
             result = await flow.async_step_tariff_result()
@@ -561,4 +570,153 @@ async def test_tariff_options_use_progress_and_save_only_confirmed_upload(tmp_pa
             assert result["type"] == "create_entry"
             assert result["data"]["tariff"]["tariff_id"] == "195"
             assert result["data"]["tariff_preference"] == "More Savings"
+    await hass.async_stop()
+
+
+@pytest.mark.parametrize("fault", ["wrong_hour", "wrong_date", "nonzero_minute", "missing_ack"])
+async def test_partial_clock_readback_requires_ack_and_matching_date_hour(fault):
+    client, peripheral = make_pair()
+    words = encode_clock(LOCAL)
+    after = [words[0] & 0xFF, words[1]]
+    if fault == "wrong_hour":
+        after[0] += 1
+    elif fault == "wrong_date":
+        after[1] += 1
+    elif fault == "nonzero_minute":
+        after[0] |= 1 << 8
+    peripheral.registers[(26, 3)], peripheral.registers[(26, 4)] = after
+    original = peripheral.write_gatt_char
+
+    async def partial(uuid, data, response):
+        if data[1] == 0x40:
+            peripheral.writes.append(data)
+            if fault != "missing_ack":
+                peripheral.send(reply(0x02, bytes((26, 3))))
+            return
+        await original(uuid, data, response)
+
+    peripheral.write_gatt_char = partial
+    with pytest.raises(ProtocolError, match="Readback mismatch"):
+        await client.set_clock(lambda: LOCAL)
+    assert client.clock_operation["outcome"] == "unconfirmed"
+    assert len(writes(peripheral)) == 1
+
+
+async def test_public_preference_persists_complete_schedule_across_restart(tmp_path):
+    from custom_components.aosmith_ble.sensor import TariffSensor
+
+    hass = HomeAssistant(str(tmp_path))
+    client, peripheral = make_pair()
+    test_entry = entry()
+    plan = cache_plan(PLAN, "200", "PSEG Long Island", "194", "194 — Time of Use")
+    with (
+        patch("custom_components.aosmith_ble.coordinator.make_client", return_value=client),
+        patch("custom_components.aosmith_ble.coordinator.persistent_notification.async_create") as notice,
+    ):
+        first = HeaterCoordinator(hass, test_entry)
+        first.async_request_refresh = AsyncMock()
+        with pytest.raises(HomeAssistantError, match="Configure"):
+            await first.async_set_energy_preference("More Savings")
+        await first.async_apply_tariff(plan, "More Hot Water", sync_clock=False)
+        initial = deepcopy(first.tariff_state["original"])
+        previous = len(writes(peripheral))
+        await first.async_set_energy_preference("More Savings")
+        assert len(writes(peripheral)) - previous == 60
+        assert not any(p[3:5] == bytes((26, 3)) for p in writes(peripheral))
+        assert first.tariff_preference == "More Savings" and not first.tariff_busy
+        assert first.tariff_state["original"] == initial
+        assert "complete tariff schedule" in notice.call_args.args[1]
+        # Options have never been saved by a flow: applied metadata must come from Store.
+        assert not test_entry.options
+        second = HeaterCoordinator(hass, test_entry)
+        await second._async_update_data()
+        assert second.tariff_preference == "More Savings"
+        sensor = TariffSensor(second)
+        assert sensor.native_value == "PSEG 194"
+        assert sensor.extra_state_attributes["last_updated"]
+        assert second.tariff_state["original"] == initial
+        assert second.tariff_plan == plan
+    await client.disconnect()
+    await hass.async_stop()
+
+
+async def test_failed_preference_keeps_last_confirmed_plan_and_reports_incomplete(tmp_path):
+    from custom_components.aosmith_ble.sensor import TariffSensor
+
+    hass = HomeAssistant(str(tmp_path))
+    client, peripheral = make_pair()
+    plan = cache_plan(PLAN, "200", "PSEG Long Island", "194", "194 — Time of Use")
+    with patch("custom_components.aosmith_ble.coordinator.make_client", return_value=client):
+        coordinator = HeaterCoordinator(hass, entry())
+        coordinator.async_request_refresh = AsyncMock()
+        await coordinator.async_apply_tariff(plan, "More Hot Water", sync_clock=False)
+        saved = coordinator.tariff_state["applied_at"]
+        write = peripheral.write_gatt_char
+
+        async def reject(uuid, data, response):
+            if data[1] == 0x40:
+                peripheral.writes.append(data)
+                peripheral.send(reply(0x02, data[3:5], status=0x40))
+                return
+            await write(uuid, data, response)
+
+        peripheral.write_gatt_char = reject
+        with pytest.raises(HomeAssistantError):
+            await coordinator.async_set_energy_preference("Most Savings")
+        assert coordinator.tariff_preference == "More Hot Water"
+        assert coordinator.tariff_state["applied_at"] == saved
+        assert TariffSensor(coordinator).native_value == "Update incomplete"
+        # A retry failing before any write must not clear the earlier incomplete state.
+        with patch.object(client, "apply_schedule", side_effect=ProtocolError("Cannot read schedule")):
+            with pytest.raises(HomeAssistantError):
+                await coordinator.async_set_energy_preference("More Savings")
+        assert TariffSensor(coordinator).native_value == "Update incomplete"
+        peripheral.write_gatt_char = write
+        await coordinator.async_set_energy_preference("Most Savings")
+        assert TariffSensor(coordinator).native_value == "PSEG 194"
+        assert not coordinator.tariff_state["schedule_incomplete"]
+        assert not coordinator.tariff_busy
+    await hass.async_stop()
+
+
+async def test_preference_upload_survives_caller_cancellation_but_stops_on_unload(tmp_path):
+    hass = HomeAssistant(str(tmp_path))
+    client = SimpleNamespace(optional_registers={})
+    test_entry = entry()
+    started = asyncio.Event()
+    stopped = asyncio.Event()
+    with patch("custom_components.aosmith_ble.coordinator.make_client", return_value=client):
+        coordinator = HeaterCoordinator(hass, test_entry)
+        coordinator.options["tariff"] = PLAN
+
+        async def apply(*args, **kwargs):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                stopped.set()
+
+        coordinator.async_apply_tariff = apply
+        caller = asyncio.create_task(coordinator.async_set_energy_preference("Most Savings"))
+        await asyncio.wait_for(started.wait(), 1)
+        with pytest.raises(HomeAssistantError, match="already running"):
+            await coordinator.async_set_energy_preference("More Savings")
+        caller.cancel()
+        await asyncio.gather(caller, return_exceptions=True)
+        assert not stopped.is_set()
+        await test_entry._async_process_on_unload(hass)
+        assert stopped.is_set() and coordinator._preference_task.cancelled()
+    await hass.async_stop()
+
+
+async def test_busy_tariff_rejects_overlapping_upload(tmp_path):
+    hass = HomeAssistant(str(tmp_path))
+    with patch(
+        "custom_components.aosmith_ble.coordinator.make_client",
+        return_value=SimpleNamespace(optional_registers={}),
+    ):
+        coordinator = HeaterCoordinator(hass, entry())
+        coordinator.tariff_busy = True
+        with pytest.raises(HomeAssistantError, match="already running"):
+            await coordinator.async_apply_tariff(PLAN, "More Savings")
     await hass.async_stop()

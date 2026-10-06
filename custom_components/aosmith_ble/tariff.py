@@ -27,6 +27,16 @@ class TariffError(Exception):
     """Lookup failed or the service returned an unsupported plan."""
 
 
+def tariff_label(plan):
+    """A readable utility/rate name, never the service's internal tariff ID."""
+    if not plan:
+        return "Not configured"
+    utility = plan.get("utility_name", "")
+    utility = {"PSEG Long Island": "PSEG"}.get(utility, utility)
+    rate = plan.get("tariff_name", "").split(" — ", 1)[0]
+    return f"{utility} {rate}".strip()[:255] or "Not configured"
+
+
 class TariffLookup:
     def __init__(self, session):
         self.session = session
