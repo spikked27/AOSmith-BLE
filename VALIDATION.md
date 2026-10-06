@@ -83,6 +83,14 @@ On HPS10-80H45DV, reported firmware 6.4:
 - A complete saved schedule contains Rate 195 / More Savings season bytes and
   a More Hot Water word. The later 194 / More Hot Water attempt records zero
   confirmed chunks and a clock timeout despite cached options and a success UI.
+- The subsequent 1.3.1 upload with clock sync unchecked completed at 20:44:25 EDT,
+  confirming all sixty chunks for Rate 194 / More Hot Water. A separate full
+  read, completed at 20:46:37 after entry reload, matches all 678 bytes across
+  five seasons and 29 extra-data words. Both active seasons differ from the
+  original Rate 195 backup; that original backup remains unchanged.
+- The new traffic contains fourteen successful address-echoing 0x02 write ACKs,
+  with seven bytes each. All sixty retained frames pass CRC validation. The full
+  upload/restore simulation now exercises this observed ACK shape.
 
 ## Release limitations
 
@@ -119,7 +127,8 @@ and mismatched writes never being repeated, opt-in controls, and backup/restore
 across coordinator restarts. Ruff lint/format checks pass. These are simulated
 peripheral and Home Assistant tests, not a physical HPS10 test.
 
-Tariff uploads and restores have not been tested on the physical heater. Every
+Tariff upload storage is confirmed on the physical heater as described above;
+restoration, timed execution and power-loss persistence remain unverified. Every
 written chunk requires fresh matching readback; a missing ACK is recorded and
 does not cause write replay. This is not proof of firmware
 activation or physical heating behavior. The writer fills all twenty event slots,
@@ -128,9 +137,10 @@ end-of-season parameter-62 read is retained without inventing its commit semanti
 The restored API was unreachable from this workspace. The owner subsequently
 reached ZIP, utility, rate and preference selection from HA. The subsequent
 diagnostics supply the actual API responses for rates 194 and 195, generated
-payloads and a complete original backup. They establish lookup and full schedule
-readability, but no completed integration schedule upload. The user runs HA
-2026.9.4; automated tests use the supported minimum version.
+payloads and a complete original backup. The final 1.3.1 capture additionally
+establishes a completed integration schedule upload and matching independent
+readback. The user runs HA 2026.9.4; automated tests use the supported minimum
+version. This clock-disabled upload contains no new clock trial or clock read.
 
 Integration Reload retains imported modules. No unsupported module-purging hot
 reload is implemented. HACS Python updates still need an HA restart; the version

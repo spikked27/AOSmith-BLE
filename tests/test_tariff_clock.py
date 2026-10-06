@@ -82,6 +82,12 @@ def test_actual_rate195_schedule_matches_saved_seasons_but_not_preference_word()
     assert generated["extra"]["words"][26:] == saved["extra"]["words"][26:]
     candidate = build_schedule(fixture["plans"]["194"], "More Hot Water")
     assert candidate["seasons"] != saved["seasons"]
+    confirmed = fixture["verified_rate194_readback"]
+    assert candidate["seasons"] == confirmed["seasons"]
+    assert candidate["extra"] == confirmed["extra"]
+    for raw in fixture["observed_write_acks"]:
+        packet = validate(bytes.fromhex(raw))
+        assert packet[1] == 0x02 and len(packet) == 7 and packet[-2] == 0x80
     events = decode_season(candidate["seasons"][0]["value"])["events"]
     assert [(e["hour"], e["days_of_week"], e["mode"]) for e in events] == [
         (12, 62, 9),
@@ -233,6 +239,15 @@ async def test_extended_read_continues_after_owner_status_40():
 
 async def test_full_upload_backs_up_before_writes_and_includes_all_twenty_slots():
     client, peripheral = make_pair()
+    original_send = peripheral.send
+
+    def observed_write_ack(packet):
+        if packet[1] == 0x04:
+            # Owner capture: DB 02 07 <block> <parameter> 80 <CRC>.
+            packet = reply(0x02, peripheral.writes[-1][3:5])
+        original_send(packet)
+
+    peripheral.send = observed_write_ack
     schedule = build_schedule(PLAN, "Most Savings")
     original_data = dict(peripheral.registers)
     saved = []

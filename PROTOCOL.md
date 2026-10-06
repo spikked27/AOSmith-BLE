@@ -111,8 +111,11 @@ not inferred from matching bytes.
 Version 1.3.1 accepts a matching 0x02 or 0x04 write response, records it, and
 still requires a separate read. If the ACK times out, it performs that read
 without repeating the write. Explicit rejection or disconnection still aborts.
-The actual heater's write-ACK layout has not yet been captured; accepting either
-opcode is compatibility logic, not a claimed observed response. Empty positive
+The subsequent 1.3.1 hardware upload captured fourteen successful seven-byte
+write ACKs: `DB 02 07 <block> <parameter> 80 <CRC>`. For example, the last write
+to 25:56 received `DB020719388020`, followed by a separate six-word readback.
+All sixty retained traffic frames have valid CRCs. The 0x04 variant remains
+compatibility logic, not an observed response from this heater. Empty positive
 0x02 ACKs cannot satisfy register reads: successful reads must echo the address
 and contain exactly the requested words. Clock/schedule/preference operations
 retain bounded raw traffic separately from the rolling poll/extended-scan ring.
@@ -124,6 +127,12 @@ after a reported confirmation error. The full saved season payloads match the
 actual Rate 195 API response generated with More Savings, despite that separate
 word indicating More Hot Water. See the observed comparison in
 [the research report](research/ONBOARDING_AND_TOU.md).
+
+The later 1.3.1 Rate 194 / More Hot Water upload confirmed all sixty chunks.
+An independent read after entry reload matched all five season blocks and
+29 extra-data words (678 bytes total), including the changed June/October
+seasons. This establishes hardware schedule storage and persistence across a
+BLE reconnect/integration reload, not power-loss persistence or timed activation.
 
 
 ## Energy and restored tariff functionality

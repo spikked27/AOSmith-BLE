@@ -382,6 +382,36 @@ trial with clock synchronization unchecked can isolate schedule storage from
 this unresolved clock behavior. Official-app Bluetooth capture remains the next
 source of direct evidence if this enhanced diagnostic trial does not resolve it.
 
+### Confirmed 1.3.1 upload and independent readback
+
+The next owner capture, downloaded at 20:46:52 EDT, records a completed
+Rate 194 / More Hot Water upload with clock synchronization disabled. All
+sixty write chunks were confirmed; the final parameter-62 read completed at
+20:44:25. After the options-flow reload, a separate stored-schedule inspection
+completed at 20:46:37 with all five seasons and no errors.
+
+Every one of its 678 schedule/extra-data bytes matches the generated payload.
+The June and October seasons each differ from the original in seventeen bytes;
+the unused seasons remain empty. The complete original backup is unchanged.
+This distinguishes the new stored Rate 194 schedule from the earlier Rate 195
+schedule, independently of the displayed preference and cached HA options.
+
+The retained traffic also resolves the write-ACK uncertainty: fourteen writes
+received `DB 02 07 <block> <parameter> 80 <CRC>`. All sixty retained frames
+have valid CRCs. One example is `DB020719388020`, acknowledging block 25,
+parameter 56. These empty positive responses are not register data. The old
+0x04-only ACK expectation explains schedule confirmation timeouts; accepting
+an empty 0x02 response as read data could also explain the earlier preference
+confirmation error. That earlier transaction itself was not captured.
+
+The fixture now includes the independently read Rate 194 payload and sample
+ACKs. The schedule upload simulation exercises the observed ACK shape. No
+runtime change or additional installation is required for this evidence update.
+Clock correctness remains unresolved: this upload deliberately skipped the
+clock, and the new capture includes no clock measurement. A standalone clock
+trial under 1.3.1 can now retain its ACK and immediate readback; a subsequent
+extended read can test whether the reported time advances.
+
 ## Primary sources
 
 - Supplied iCOMM 14.1.0 APK identified above; recovered function/module references
