@@ -1,6 +1,6 @@
 # Feature coverage
 
-Version 2.1.0 targets next-generation iCOMM heat pumps. The tested heater is an
+Version 2.1.1 targets next-generation iCOMM heat pumps. The tested heater is an
 HPS10-80H45DV with firmware 6.4.
 
 | Feature | Status |
@@ -16,7 +16,7 @@ HPS10-80H45DV with firmware 6.4.
 | Tariff schedule upload | Rate 194 / More Hot Water confirmed across all 678 stored bytes |
 | Savings preference | Rebuilds all season, holiday and preference data; persists confirmed plan |
 | Tariff display | Cached applied plan, compact label, preference and update status |
-| Automatic clock maintenance | Startup/recovery/15-minute checks, local timezone/DST correction, and daily refresh for zero-minute readback |
+| Automatic clock maintenance | Startup/recovery checks and hourly checks at :02, local timezone/DST correction, and daily refresh for zero-minute readback |
 | Diagnostic reads | Disabled by default, with completion notification and optional status sensor |
 | Integration reload | Supported for settings/reconnection; new code requires Core restart |
 

@@ -1,3 +1,12 @@
+# 2.1.1 — October 5, 2026
+
+- Reduce scheduled clock reads to hourly, aligned to local minute 2. The first
+  normal poll at or after :02 checks whether the heater has advanced into the new hour.
+- Retain startup/recovery checks, early timezone/DST/fault checks, daily refresh
+  for partial minute readback, and persistent retry limits.
+- Schedule repeated/skipped DST hours correctly and record the next check time in diagnostics.
+- Catch up once after a delayed poll without replaying missed hourly checks.
+
 # 2.1.0 — October 5, 2026
 
 - Maintain the heater clock automatically on startup, after connection recovery,

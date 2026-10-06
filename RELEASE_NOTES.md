@@ -1,24 +1,15 @@
-# AO Smith Local BLE 2.1.0
+# AO Smith Local BLE 2.1.1
 
-The integration now maintains the water heater's time automatically.
+Clock maintenance now checks **once per hour at minute 2**, on the first normal
+poll at or after :02, instead of every 15 minutes. This gives the heater time
+to advance into the new hour before checking its date/hour readback.
 
-- Checks at startup, after connection recovery and every 15 minutes.
-- Rechecks on the next normal poll after Home Assistant's timezone or DST offset changes.
-- Synchronizes an unset/invalid clock or detectable drift; full minute readback
-  allows a two-minute tolerance.
-- Handles the HPS10 zero-minute response without a repeated-correction loop.
-  Matching date/hour is partial readback, with a daily time refresh while connected.
-- Persists correction history and retry limits across restart. Failed corrections
-  wait at least an hour; normal controls remain usable when clock reads fail.
-- Hides the manual clock button by default. Inspection controls stay available for
-  the remaining physical test; extra diagnostic entities will be removed after testing.
+Startup and connection-recovery checks remain. Timezone/DST changes and a new
+clock-unset fault can trigger an earlier check. A matching clock is left alone,
+except for the daily refresh needed when HPS10 readback omits minutes.
+Retry limits, saved history and ordinary heater controls are unchanged.
 
-Update through HACS and restart Home Assistant Core once. If you are collecting
-an independent clock-ticking test, finish that capture on **2.0.0** before updating:
+Update through HACS and restart Home Assistant Core once. If collecting an
+independent clock-ticking test, finish that capture on **2.0.0** before updating:
 automatic correction can conceal whether the heater advances time by itself.
-
-The software test suite covers clock drift, DST, partial readback, daily refresh,
-failed reads, disk failure, cancellation, restart persistence and existing controls.
-Physical RTC ticking and heating-event timing still require owner testing.
-No extra options, entities or user automations are required for clock maintenance.
-Standard Download diagnostics includes the maintenance record.
+Extra diagnostic entities remain until that hardware testing is complete.

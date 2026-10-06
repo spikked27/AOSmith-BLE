@@ -28,7 +28,7 @@ This is an independent community integration, not an official A. O. Smith produc
 | Hot water availability | Low, Medium and High displayed as 0%, 50% and 100% |
 | Energy usage | Cumulative kWh, compatible with the Energy dashboard |
 | Error status | Current fault description and code |
-| Automatic clock maintenance | Checks at startup, after connection recovery and every 15 minutes |
+| Automatic clock maintenance | Checks at startup, after connection recovery and hourly at minute 2 |
 
 Version 2 keeps everyday controls on the device page and diagnostic tools disabled
 by default. Existing pairing credentials, entity identities and saved tariff data
@@ -138,14 +138,17 @@ Instantaneous power and historical cloud data are not provided.
 
 **Clock:** time maintenance is automatic, using Home Assistant's configured
 local time and timezone. It reads the heater clock on startup, after a failed
-connection recovers, and every 15 minutes. A timezone or DST offset change causes
+connection recovers, and on the first normal poll at or after **:02 each hour**.
+This allows the heater to advance into the new hour before comparison.
+A timezone or DST offset change causes
 a check on the next normal poll. Invalid dates, the clock-unset fault, or detectable
 drift trigger synchronization. Full minute readback allows a two-minute tolerance.
 
 On HPS10 firmware that returns zero minutes, matching date/hour is treated as
 partial readback, with a short grace period around hour boundaries. The integration
-refreshes local time at least once every 24 hours while connected because minute
-drift cannot be measured reliably through that response. Failed writes wait at
+refreshes local time on the first hourly check after 24 hours have elapsed since
+the last synchronization, because minute drift cannot be measured reliably through
+that response. Failed writes wait at
 least an hour before another automatic attempt; successful writes have a five-minute
 minimum interval. These limits survive restarts. Missing clock responses never
 trigger blind writes, and clock errors leave normal heater readings usable.

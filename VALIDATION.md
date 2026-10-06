@@ -1,8 +1,8 @@
-# Version 2.1.0 validation
+# Version 2.1.1 validation
 
 Reviewed October 5, 2026. Automated checks use Python 3.13.15 and Home Assistant
 2025.12.5, the supported minimum series. The owner's installation runs HA 2026.9.4.
-**238 tests pass locally**, plus Ruff lint/format and release archive validation.
+**248 tests pass locally**, plus Ruff lint/format and release archive validation.
 The GitHub Tests workflow gates publication of the versioned release.
 
 ## Software coverage
@@ -64,13 +64,16 @@ long idle/recovery and energy-counter resets require further physical testing.
 Storage/readback success does not establish these effects.
 
 Startup and normal polling now include bounded automatic clock maintenance.
-Clock reads occur at startup/recovery and every 15 minutes, with early checks for
+Clock reads occur at startup/recovery and the first normal poll at/after local :02
+each hour, with early checks for
 new clock faults or timezone/offset changes. Tests cover the two-minute tolerance,
 zero-minute/hour-boundary handling, daily refresh, timezone changes, both DST
 transitions and UTC-based cooldown calculations. Failed attempts remain throttled
 across restart and cancellation; storage verification precedes automatic transmission.
 Read/storage errors leave the coordinator's valid heater snapshot usable. Clock
-maintenance is skipped while a tariff operation is active.
+maintenance is skipped while a tariff operation is active. Hourly scheduling tests
+cover startup before/after :02, delayed polls, the repeated fall hour, the spring
+skip, a half-hour DST transition and backwards host-clock correction.
 
 Manual and tariff clock writes update the same history. A clock-history storage
 failure does not discard the tariff's independently saved completion record.

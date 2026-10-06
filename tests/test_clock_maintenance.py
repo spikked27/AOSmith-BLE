@@ -12,7 +12,7 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 from test_tariff_clock import entry, make_pair, writes
 
 from custom_components.aosmith_ble.client import HeaterState
-from custom_components.aosmith_ble.clock import ClockMaintenance, correction_reason, elapsed
+from custom_components.aosmith_ble.clock import ClockMaintenance, correction_reason, elapsed, next_hour_check
 from custom_components.aosmith_ble.coordinator import HeaterCoordinator
 from custom_components.aosmith_ble.protocol import ProtocolError, encode_clock
 
@@ -120,8 +120,11 @@ async def test_startup_periodic_and_daily_refresh_without_write_loop(setup_clock
     for _ in range(3):
         await manager.async_check(0)
     assert client.read_clock.await_count == 1
-    now[0] += timedelta(minutes=15)
-    manager.next_check = 0
+    now[0] = LOCAL.replace(hour=22, minute=1, second=59)
+    await manager.async_check(0)
+    assert client.read_clock.await_count == 1
+    now[0] += timedelta(seconds=1)
+    client.read_clock.return_value = encode_clock(now[0].replace(minute=0))
     await manager.async_check(0)
     assert client.read_clock.await_count == 2 and client.set_clock.await_count == 1
     restarted = ClockMaintenance(hass, entry(), client, lambda: now[0])
@@ -129,7 +132,6 @@ async def test_startup_periodic_and_daily_refresh_without_write_loop(setup_clock
     assert client.set_clock.await_count == 1  # Restart reads, but never refreshes every startup.
     now[0] += timedelta(days=1)
     client.read_clock.return_value = encode_clock(now[0].replace(minute=0))
-    restarted.next_check = 0
     await restarted.async_check(0)
     assert client.set_clock.await_count == 2
     assert restarted.state["last_reason"] == "daily_refresh_partial_readback"
@@ -313,3 +315,50 @@ async def test_clock_history_storage_error_does_not_lose_tariff_confirmation(tmp
     finally:
         await client.disconnect()
         await hass.async_stop()
+
+
+@pytest.mark.parametrize(
+    "local,zone,expected",
+    [
+        ("2026-10-05T21:01:59-04:00", "America/New_York", "2026-10-05T21:02:00-04:00"),
+        ("2026-10-05T21:02:00-04:00", "America/New_York", "2026-10-05T22:02:00-04:00"),
+        ("2026-10-05T21:49:04-04:00", "America/New_York", "2026-10-05T22:02:00-04:00"),
+        ("2026-12-31T23:59:30-05:00", "America/New_York", "2027-01-01T00:02:00-05:00"),
+        ("2026-03-08T01:35:00-05:00", "America/New_York", "2026-03-08T03:02:00-04:00"),
+        ("2026-11-01T01:35:00-04:00", "America/New_York", "2026-11-01T01:02:00-05:00"),
+        ("2026-11-01T01:35:00-05:00", "America/New_York", "2026-11-01T02:02:00-05:00"),
+        ("2026-10-04T01:35:00+10:30", "Australia/Lord_Howe", "2026-10-04T03:02:00+11:00"),
+    ],
+)
+def test_hourly_deadline_uses_local_minute_two_across_dst(local, zone, expected):
+    now = datetime.fromisoformat(local).astimezone(ZoneInfo(zone))
+    target = next_hour_check(now)
+    assert target.isoformat() == expected
+    assert target.timestamp() > now.timestamp()
+
+
+async def test_delayed_hourly_check_runs_once_and_realigns(setup_clock):
+    _, client, manager, now = setup_clock
+    client.read_clock.return_value = encode_clock(now[0])
+    await manager.async_check(0)
+    now[0] = LOCAL.replace(hour=23, minute=7)
+    client.read_clock.return_value = encode_clock(now[0])
+    await manager.async_check(0)
+    assert client.read_clock.await_count == 2
+    assert manager.state["next_check_at"] == "2026-10-06T00:02:00-04:00"
+    await manager.async_check(0)
+    assert client.read_clock.await_count == 2
+    client.set_clock.assert_not_awaited()
+
+
+async def test_backwards_host_clock_change_does_not_wait_for_stale_deadline(setup_clock):
+    _, client, manager, now = setup_clock
+    client.read_clock.return_value = encode_clock(now[0])
+    await manager.async_check(0)
+    now[0] -= timedelta(hours=1)
+    client.read_clock.return_value = encode_clock(now[0])
+    await manager.async_check(0)
+    assert client.read_clock.await_count == 2
+    assert manager.state["next_check_at"] == "2026-10-05T21:02:00-04:00"
+    await manager.async_check(0)
+    assert client.read_clock.await_count == 2

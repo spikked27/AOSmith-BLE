@@ -4,7 +4,6 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from time import monotonic
 
 from bleak.exc import BleakError
 from homeassistant.helpers.storage import Store
@@ -13,7 +12,6 @@ from .const import DOMAIN
 from .protocol import ProtocolError, decode_clock
 
 LOGGER = logging.getLogger(__name__)
-CHECK_INTERVAL = 15 * 60
 RETRY_INTERVAL = 60 * 60
 MIN_SYNC_INTERVAL = 5 * 60
 REFRESH_INTERVAL = 24 * 60 * 60
@@ -23,6 +21,17 @@ ACCEPTED = {"readback_confirmed", "acknowledged"}
 
 def _saved_state(path):
     return json.loads(Path(path).read_text())["data"]
+
+
+def next_hour_check(now):
+    """Next local :02, including repeated/skipped hours and non-hour DST offsets."""
+    candidate = now.astimezone(timezone.utc).replace(second=0, microsecond=0)
+    for _ in range(120):
+        candidate += timedelta(minutes=1)
+        local = candidate.astimezone(now.tzinfo)
+        if local.minute == 2:
+            return local
+    raise ValueError("Could not determine the next local clock check")
 
 
 def elapsed(now, value):
@@ -71,6 +80,7 @@ class ClockMaintenance:
         self.state = {}
         self.loaded = False
         self.next_check = 0.0
+        self.checked_at = 0.0
         self.checked_context = None
         self.last_fault = None
 
@@ -111,22 +121,25 @@ class ClockMaintenance:
             LOGGER.warning("Could not save clock maintenance history: %s", err)
 
     async def async_check(self, fault, *, force=False):
-        """Read on startup/recovery and every 15 minutes; clock failures leave controls usable."""
+        """Read on startup/recovery and the first normal poll at or after local :02."""
         now = self.local_now()
         context = self.context(now)
         if (
             not force
-            and monotonic() < self.next_check
+            and self.checked_at <= now.timestamp() < self.next_check
             and self.checked_context == context
             and not (fault == 42 and self.last_fault != 42)
         ):
             return
-        self.next_check = monotonic() + CHECK_INTERVAL
+        next_check = next_hour_check(now)
+        self.next_check = next_check.timestamp()
+        self.checked_at = now.timestamp()
         self.checked_context = context
         self.last_fault = fault
         try:
             await self.async_load()
             self.state["last_checked_at"] = now.isoformat()
+            self.state["next_check_at"] = next_check.isoformat()
             words = await self.client.read_clock()
             now = self.local_now()  # Do not compare against a timestamp from before BLE I/O.
             context = self.context(now)
