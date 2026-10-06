@@ -1,0 +1,31 @@
+{
+  "source": "Clock-only frames from owner-authorized HPS10 trial on October 5, 2026; no device or pairing identifiers.",
+  "local_time": "2026-10-05T20:51:54.653240-04:00",
+  "before_words": [
+    20,
+    13637
+  ],
+  "requested_words": [
+    13076,
+    13637
+  ],
+  "after_words": [
+    20,
+    13637
+  ],
+  "read_request": "BDA0071A0302B0",
+  "before_response": "DB020B1A0300143545807A",
+  "write_request": "BD400A1A033314354594",
+  "write_response": "DB02071A038030",
+  "after_response": "DB020B1A0300143545807A",
+  "later_responses": {
+    "03": {
+      "time": "2026-10-06T00:54:16.119910+00:00",
+      "frame": "DB02091A03001480F8"
+    },
+    "04": {
+      "time": "2026-10-06T00:54:16.891917+00:00",
+      "frame": "DB02091A0435458016"
+    }
+  }
+}

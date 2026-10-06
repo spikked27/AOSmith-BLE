@@ -184,20 +184,32 @@ async def test_clock_confirms_fresh_readback_with_different_or_missing_ack(ack):
 
 
 async def test_clock_retains_actual_words_when_minutes_do_not_match():
+    captured = json.loads((ROOT / "research/observed_clock_trial.json").read_text())
     client, peripheral = make_pair()
+    local = datetime.fromisoformat(captured["local_time"])
+    peripheral.registers.update(zip(((26, 3), (26, 4)), captured["before_words"], strict=True))
     original = peripheral.write_gatt_char
 
-    async def drop_minutes(uuid, data, response):
-        await original(uuid, data, response)
+    async def replay_clock(uuid, data, response):
+        if data == bytes.fromhex(captured["read_request"]):
+            peripheral.writes.append(data)
+            peripheral.send(validate(bytes.fromhex(captured["after_response"])))
+            return
         if data[1] == 0x40:
-            peripheral.registers[(26, 3)] &= 0xFF
+            assert data.hex().upper() == captured["write_request"]
+            peripheral.writes.append(data)
+            peripheral.send(validate(bytes.fromhex(captured["write_response"])))
+            return
+        await original(uuid, data, response)
 
-    peripheral.write_gatt_char = drop_minutes
+    peripheral.write_gatt_char = replay_clock
     with pytest.raises(ProtocolError, match="Readback mismatch"):
-        await client.set_clock(lambda: LOCAL)
+        await client.set_clock(lambda: local)
     assert client.clock_operation["outcome"] == "unconfirmed"
-    assert client.clock_operation["after"] == [LOCAL.hour, encode_clock(LOCAL)[1]]
-    assert client.clock_operation["local_time"].endswith("19:00")
+    assert client.clock_operation["requested_words"] == captured["requested_words"]
+    assert client.clock_operation["after"] == captured["after_words"]
+    assert client.clock_operation["local_time"].endswith("20:00")
+    assert client.clock_operation["last_write"]["ack"] == captured["write_response"]
     assert len(writes(peripheral)) == 1
 
 

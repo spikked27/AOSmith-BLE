@@ -91,6 +91,12 @@ On HPS10-80H45DV, reported firmware 6.4:
 - The new traffic contains fourteen successful address-echoing 0x02 write ACKs,
   with seven bytes each. All sixty retained frames pass CRC validation. The full
   upload/restore simulation now exercises this observed ACK shape.
+- The 20:51:54 standalone clock trial sent `3314 3545` and received the successful
+  ACK `DB02071A038030`. Immediate readback remained `0014 3545`; independent
+  reads at 20:54:16 also returned those unchanged words. All captured frames
+  have valid CRCs. The regression now replays these exact command/reply bytes.
+  The result does not establish whether these are the running RTC registers,
+  nor that the internal RTC itself is stopped. The displayed mismatch is valid.
 
 ## Release limitations
 

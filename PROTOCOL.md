@@ -134,6 +134,15 @@ An independent read after entry reload matched all five season blocks and
 seasons. This establishes hardware schedule storage and persistence across a
 BLE reconnect/integration reload, not power-loss persistence or timed activation.
 
+The next standalone clock trial captures a successful `DB02071A038030` ACK
+for `BD400A1A033314354594` (20:51, October 5, 2026 in the app's legacy format).
+Immediate readback is `DB020B1A0300143545807A`: the same `0014 3545` as before.
+Separate reads roughly 2 minutes 21 seconds after transmission remain unchanged.
+This rules out a missing ACK as the explanation for this trial's failure. The
+minute byte is absent in readback, but an internal RTC fault or stopped oscillator
+cannot be inferred until this model's actual clock interface is identified.
+See [the phone capture procedure](research/BLUETOOTH_CAPTURE.md) for the next step.
+
 
 ## Energy and restored tariff functionality
 

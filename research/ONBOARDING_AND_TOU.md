@@ -412,6 +412,37 @@ clock, and the new capture includes no clock measurement. A standalone clock
 trial under 1.3.1 can now retain its ACK and immediate readback; a subsequent
 extended read can test whether the reported time advances.
 
+### Standalone clock trial with retained traffic
+
+At 20:51:54 EDT, the requested words were `3314 3545` (20:51 on October 5,
+2026 using the recovered legacy encoding). The six retained transaction frames
+are preserved in `observed_clock_trial.json`. All have valid CRCs:
+
+| Step | Raw frame |
+|---|---|
+| Read two words | `BDA0071A0302B0` |
+| Before | `DB020B1A0300143545807A` |
+| Write local time | `BD400A1A033314354594` |
+| Success acknowledgement | `DB02071A038030` |
+| Read two words again | `BDA0071A0302B0` |
+| After | `DB020B1A0300143545807A` |
+
+Independent single-word reads at 20:54:16 returned `0014` and `3545`, still
+unchanged. The mismatch error correctly identifies the absent minute byte;
+it is not a missing reply or checksum failure. The extended scan's one error
+is the already-known rejected 28:113 preference candidate, not a clock-read error.
+The internal RTC may use another interface or may not expose minutes through
+these words; these data do not establish that the RTC is frozen or faulty.
+
+The serializers and constructor were checked again: minute then hour, two-digit
+hex bytes, then packed date; no swapped byte order or extra word was found.
+The only explicit setter still belongs to the legacy connection branch. A
+read after 21:02, without another clock write, can test whether the hour advances
+from `0014` to `0015` around the expected boundary. Advancement would support
+a partial/masked read interface, without proving minute accuracy. If it remains
+unchanged, capture the actual installed app connecting and saving the tariff on
+this heater. Use [the capture procedure](BLUETOOTH_CAPTURE.md).
+
 ## Primary sources
 
 - Supplied iCOMM 14.1.0 APK identified above; recovered function/module references
