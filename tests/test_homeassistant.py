@@ -688,7 +688,7 @@ async def test_release_entities_are_minimal_with_opt_in_debug(tmp_path, coordina
         await platform.async_setup_entry(hass, entry, entities.extend)
     normal = [e for e in entities if e.entity_registry_enabled_default]
     debug = [e for e in entities if not e.entity_registry_enabled_default]
-    assert len(normal) == 8 and len(debug) == 6
+    assert len(normal) == 7 and len(debug) == 7
     assert sum(e.entity_category is None for e in normal) == 7
     assert {e.action for e in debug if isinstance(e, button.DebugButton)} == {
         "refresh",
@@ -740,9 +740,9 @@ async def test_debug_default_migration_runs_once_and_preserves_pairing(tmp_path)
             "button.refresh", disabled_by=er.RegistryEntryDisabler.INTEGRATION
         )
         config_entries.async_update_entry.assert_called_once_with(
-            entry, minor_version=3, options=clean_options({})
+            entry, minor_version=4, options=clean_options({})
         )
-        entry.minor_version = 3  # User can now re-enable the button permanently.
+        entry.minor_version = 4  # User can now re-enable the button permanently.
         registry.reset_mock()
         assert await async_migrate_entry(hass, entry)
         registry.async_update_entity.assert_not_called()
@@ -865,7 +865,7 @@ async def test_v2_migration_preserves_enabled_inspection_and_tariff(tmp_path):
         "sensor.diagnostic_read_status",
     }
     saved = config_entries.async_update_entry.call_args.kwargs
-    assert saved["minor_version"] == 3
+    assert saved["minor_version"] == 4
     assert saved["options"]["tariff"] == options["tariff"]
     assert saved["options"]["tariff_preference"] == "More Savings"
     await hass.async_stop()

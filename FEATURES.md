@@ -1,6 +1,6 @@
 # Feature coverage
 
-Version 2.0.0 targets next-generation iCOMM heat pumps. The tested heater is an
+Version 2.1.0 targets next-generation iCOMM heat pumps. The tested heater is an
 HPS10-80H45DV with firmware 6.4.
 
 | Feature | Status |
@@ -16,7 +16,7 @@ HPS10-80H45DV with firmware 6.4.
 | Tariff schedule upload | Rate 194 / More Hot Water confirmed across all 678 stored bytes |
 | Savings preference | Rebuilds all season, holiday and preference data; persists confirmed plan |
 | Tariff display | Cached applied plan, compact label, preference and update status |
-| Clock synchronization | App encoding; accepted ACK and date/hour readback; minute readback can be zero |
+| Automatic clock maintenance | Startup/recovery/15-minute checks, local timezone/DST correction, and daily refresh for zero-minute readback |
 | Diagnostic reads | Disabled by default, with completion notification and optional status sensor |
 | Integration reload | Supported for settings/reconnection; new code requires Core restart |
 
@@ -28,6 +28,9 @@ unverified. Readback confirms storage, not resulting heating behavior.
 Not implemented: measured tank temperature, live compressor/element activity,
 cloud history, Wi-Fi onboarding, demand-response enrollment or unsupported legacy
 heater families. There are no public restore controls or raw-register parameters.
+
+Manual clock synchronization is disabled by default. Extra diagnostic entities
+remain only until the current hardware testing is complete.
 
 Original backups and detailed command evidence remain available internally for
 support. Existing opt-in diagnostic buttons are preserved on upgrade.

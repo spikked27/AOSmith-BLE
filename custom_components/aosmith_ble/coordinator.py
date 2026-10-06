@@ -16,6 +16,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .client import HeaterClient
+from .clock import ClockMaintenance
 from .const import (
     CONF_ENERGY_PREFERENCE,
     CONF_IDENTIFIER,
@@ -93,6 +94,8 @@ class HeaterCoordinator(DataUpdateCoordinator):
         self.client.optional_registers["energy_preference_experimental"] = ENERGY_PREFERENCE
         self.address = entry.data[CONF_ADDRESS]
         self.command_lock = asyncio.Lock()
+        self.clock = ClockMaintenance(hass, entry, self.client, self.local_now)
+        self._clock_recovery = False
         super().__init__(
             hass,
             LOGGER,
@@ -118,9 +121,14 @@ class HeaterCoordinator(DataUpdateCoordinator):
             if self.tariff_state is None:
                 self.tariff_state = await self.tariff_store.async_load() or {}
             try:
-                return await self.client.read_state()
+                state = await self.client.read_state()
             except (BleakError, TimeoutError, ProtocolError) as err:
+                self._clock_recovery = True
                 raise UpdateFailed(str(err)) from err
+            if not self.tariff_busy:
+                await self.clock.async_check(state.fault, force=self._clock_recovery)
+                self._clock_recovery = False
+            return state
 
     @property
     def tariff_plan(self):
@@ -285,10 +293,14 @@ class HeaterCoordinator(DataUpdateCoordinator):
 
     async def async_set_clock(self):
         async with self.command_lock:
+            previous = self.client.clock_operation
             try:
                 result = await self.client.set_clock(self.local_now)
             except (BleakError, TimeoutError, ProtocolError, ValueError) as err:
                 raise HomeAssistantError(str(err)) from err
+            finally:
+                if self.client.clock_operation is not previous:
+                    await self.clock.async_record_operation(self.client.clock_operation, reason="manual")
         await self.async_request_refresh()
         return result
 
@@ -321,6 +333,7 @@ class HeaterCoordinator(DataUpdateCoordinator):
 
     async def _async_apply_tariff(self, plan, preference, *, sync_clock, restore):
         async with self.command_lock:
+            previous_clock = self.client.clock_operation
             if self.tariff_state is None:
                 self.tariff_state = await self.tariff_store.async_load() or {}
             if self.tariff_state.get("last_operation", {}).get("outcome") == "partial_or_unconfirmed":
@@ -408,6 +421,8 @@ class HeaterCoordinator(DataUpdateCoordinator):
                     self.tariff_state["schedule_incomplete"] = outcome != "readback_confirmed"
                 self.tariff_state["last_operation"] = self.client.schedule_operation
                 self.tariff_state["clock_operation"] = self.client.clock_operation
+                if self.client.clock_operation is not previous_clock:
+                    await self.clock.async_record_operation(self.client.clock_operation, reason="tariff")
                 await self.tariff_store.async_save(self.tariff_state)
                 self.async_update_listeners()
         await self.async_request_refresh()

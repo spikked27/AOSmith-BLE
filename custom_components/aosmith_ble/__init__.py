@@ -114,5 +114,17 @@ async def async_migrate_entry(hass, entry):
                 registry.async_update_entity(
                     entity.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
                 )
-        hass.config_entries.async_update_entry(entry, minor_version=3, options=clean_options(entry.options))
+    if entry.minor_version < 4:
+        registry = er.async_get(hass)
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if (
+                entity.platform == DOMAIN
+                and entity.domain == "button"
+                and entity.unique_id.endswith("_set_clock")
+                and entity.disabled_by is None
+            ):
+                registry.async_update_entity(
+                    entity.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
+                )
+        hass.config_entries.async_update_entry(entry, minor_version=4, options=clean_options(entry.options))
     return True

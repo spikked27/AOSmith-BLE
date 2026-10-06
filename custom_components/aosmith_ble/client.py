@@ -426,6 +426,16 @@ class HeaterClient:
                 operation["local_time"] = decode_clock(after)
             operation["traffic"][:] = [e for e in self.events if e["time"] >= operation["started_at"]]
 
+    async def read_clock(self):
+        """Read both calendar words together without changing device settings."""
+        async with self._lock:
+            try:
+                await self._ensure_session()
+                return await self._read_words(CLOCK, 2)
+            except BaseException:
+                await self._close()
+                raise
+
     async def set_clock(self, local_now):
         async with self._lock:
             try:

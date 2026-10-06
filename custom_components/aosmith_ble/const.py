@@ -19,7 +19,7 @@ FAULT = (2, 7)
 MIN_TEMP_F = 95
 MAX_TEMP_F = 150
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 CONF_ENERGY_PREFERENCE = "enable_experimental_energy_preference"
 ENERGY_PREFERENCE = (28, 75)
 CLOCK = (26, 3)

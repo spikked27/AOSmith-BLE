@@ -23,7 +23,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
 class ClockButton(HeaterEntity, ButtonEntity):
     _attr_name = "Synchronize clock"
     _attr_icon = "mdi:clock-check-outline"
-    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
 
     def __init__(self, coordinator):
         super().__init__(coordinator, "set_clock")

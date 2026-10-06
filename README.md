@@ -18,7 +18,7 @@ This is an independent community integration, not an official A. O. Smith produc
 
 ## Features
 
-| Control or reading | Description |
+| Feature | Description |
 |---|---|
 | Water heater | Temperature, Hybrid, Heat pump, Electric, Vacation and Guest modes |
 | Mode duration | Electric and Guest: 1–7 days; Vacation: 1–99 days or Until changed |
@@ -28,7 +28,7 @@ This is an independent community integration, not an official A. O. Smith produc
 | Hot water availability | Low, Medium and High displayed as 0%, 50% and 100% |
 | Energy usage | Cumulative kWh, compatible with the Energy dashboard |
 | Error status | Current fault description and code |
-| Synchronize clock | Uses the time and timezone configured in Home Assistant |
+| Automatic clock maintenance | Checks at startup, after connection recovery and every 15 minutes |
 
 Version 2 keeps everyday controls on the device page and diagnostic tools disabled
 by default. Existing pairing credentials, entity identities and saved tariff data
@@ -136,12 +136,26 @@ not measured remaining gallons. Other raw codes display Unknown.
 **Energy:** the cumulative kWh sensor can be added to the Energy dashboard.
 Instantaneous power and historical cloud data are not provided.
 
-**Clock:** tariff setup synchronizes local time automatically. Use **Synchronize
-clock** to set it again, including after a timezone or daylight-saving change.
-There are no clock writes on startup or during polling. On tested HPS10 firmware,
-clock readback can omit minutes: an acknowledged write with matching date/hour
-is accepted and recorded as partial readback. Continued ticking and DST behavior,
-actual timed heating and countdown expiry still need physical verification.
+**Clock:** time maintenance is automatic, using Home Assistant's configured
+local time and timezone. It reads the heater clock on startup, after a failed
+connection recovers, and every 15 minutes. A timezone or DST offset change causes
+a check on the next normal poll. Invalid dates, the clock-unset fault, or detectable
+drift trigger synchronization. Full minute readback allows a two-minute tolerance.
+
+On HPS10 firmware that returns zero minutes, matching date/hour is treated as
+partial readback, with a short grace period around hour boundaries. The integration
+refreshes local time at least once every 24 hours while connected because minute
+drift cannot be measured reliably through that response. Failed writes wait at
+least an hour before another automatic attempt; successful writes have a five-minute
+minimum interval. These limits survive restarts. Missing clock responses never
+trigger blind writes, and clock errors leave normal heater readings usable.
+
+Tariff setup still synchronizes time before uploading. Manual synchronization is
+retained as a disabled diagnostic button during testing, and its result contributes
+to the automatic refresh history. No user settings or automations are required.
+Clock maintenance runs locally while Home Assistant and the heater are connected;
+it cannot correct the heater while Home Assistant is offline. Readback still does
+not prove autonomous ticking or the physical timing of heating events.
 
 ## Updates and troubleshooting
 
@@ -158,7 +172,10 @@ For a diagnostic capture, enable **Inspect extended registers** or **Read stored
 tariff schedule** under the device's disabled entities. Wait for the **AO Smith
 diagnostic read finished** notification before downloading diagnostics. It reports
 completion and unread/error counts. An optional Diagnostic read status sensor is
-also available. Previously enabled diagnostic buttons remain enabled on upgrade.
+also available. Previously enabled inspection buttons remain enabled on upgrade.
+These additional diagnostic entities are retained for the remaining hardware tests;
+they will be removed after testing is complete. Standard **Download diagnostics**
+and internal troubleshooting records will remain.
 
 Report issues with your heater model, firmware, HA/integration version and
 relevant logs at [GitHub Issues](https://github.com/spikked27/AOSmith-BLE/issues).

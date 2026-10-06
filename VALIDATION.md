@@ -1,8 +1,8 @@
-# Version 2.0.0 validation
+# Version 2.1.0 validation
 
 Reviewed October 5, 2026. Automated checks use Python 3.13.15 and Home Assistant
 2025.12.5, the supported minimum series. The owner's installation runs HA 2026.9.4.
-**211 tests pass locally**, plus Ruff lint/format and release archive validation.
+**238 tests pass locally**, plus Ruff lint/format and release archive validation.
 The GitHub Tests workflow gates publication of the versioned release.
 
 ## Software coverage
@@ -63,10 +63,24 @@ Additional models, active proxies, Hot Water Plus effects, pairing-slot limits,
 long idle/recovery and energy-counter resets require further physical testing.
 Storage/readback success does not establish these effects.
 
-No clock or tariff write is performed by installation, migration, startup or
-normal polling. The public Synchronize clock action and tariff setup are explicit
-write paths. New Python code requires a Core restart; options and tariff changes
-work without it. Integration Reload reconnects but retains imported modules.
+Startup and normal polling now include bounded automatic clock maintenance.
+Clock reads occur at startup/recovery and every 15 minutes, with early checks for
+new clock faults or timezone/offset changes. Tests cover the two-minute tolerance,
+zero-minute/hour-boundary handling, daily refresh, timezone changes, both DST
+transitions and UTC-based cooldown calculations. Failed attempts remain throttled
+across restart and cancellation; storage verification precedes automatic transmission.
+Read/storage errors leave the coordinator's valid heater snapshot usable. Clock
+maintenance is skipped while a tariff operation is active.
+
+Manual and tariff clock writes update the same history. A clock-history storage
+failure does not discard the tariff's independently saved completion record.
+The manual button is disabled by default via a one-time migration; existing
+inspection controls remain enabled where the owner opted in. Diagnostic entity
+removal is pending completion of hardware testing. Standard diagnostics remain.
+
+The independent 22:02 EDT clock capture must run on version 2.0.0 before enabling
+this automatic correction, to avoid masking autonomous rollover. New Python code
+requires a Core restart; normal options and tariff changes do not.
 
 The reported HAOS shutdown screenshot shows services stopping and Supervisor
 waiting, not its initiating cause. No host shutdown was reproduced or invoked by

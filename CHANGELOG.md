@@ -1,3 +1,19 @@
+# 2.1.0 — October 5, 2026
+
+- Maintain the heater clock automatically on startup, after connection recovery,
+  every 15 minutes and when HA's timezone or UTC offset changes.
+- Correct invalid/unset clocks and detectable drift. Allow two minutes for full
+  minute readback and hour-boundary transitions. Do not interpret masked zero
+  minutes as minute drift; refresh partial-readback clocks every 24 hours.
+- Persist retry limits before automatic writes: failed attempts wait an hour;
+  successful corrections have a five-minute minimum interval. Restart and cancellation
+  cannot bypass those limits. Read failures never trigger blind clock writes.
+- Keep clock failures separate from normal heater readings and serialize maintenance
+  with other commands. Tariff and manual clock writes update the maintenance history.
+- Move manual clock synchronization into disabled diagnostic controls, preserving
+  existing inspection controls until the remaining hardware test is complete.
+- Record maintenance decisions and readback scope in standard downloaded diagnostics.
+
 # 2.0.0 — October 5, 2026
 
 - Promote full-schedule savings changes to an everyday control; persist applied

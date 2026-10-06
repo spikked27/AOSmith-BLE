@@ -1,27 +1,24 @@
-# AO Smith Local BLE 2.0.0
+# AO Smith Local BLE 2.1.0
 
-A cleaner everyday interface with complete tariff and savings controls.
+The integration now maintains the water heater's time automatically.
 
-- **Electricity tariff** shows the configured utility and rate, such as **PSEG 194**.
-- **Savings preference** applies More Hot Water, More Savings or Most Savings to
-  the complete cached schedule, with progress/completion notifications and durable
-  storage of the last confirmed plan. No Internet lookup is needed to change it.
-- **Configure** opens tariff setup directly: ZIP, utility, rate and preference.
-  Clock synchronization is included automatically.
-- **Mode duration** supports Electric, Vacation and Guest; Hot Water Plus appears
-  automatically on a heater reporting support.
-- Removed public restore buttons and experimental option switches. Diagnostic
-  entities are disabled by default; already enabled inspection buttons stay enabled.
-- Clock synchronization accepts the observed acknowledged HPS10 zero-minute
-  readback when date/hour match. Diagnostics distinguish partial from full readback;
-  they do not claim RTC ticking or DST verification.
-- Added the standard blue HACS installation button, status badges, streamlined
-  setup documentation and issue templates.
+- Checks at startup, after connection recovery and every 15 minutes.
+- Rechecks on the next normal poll after Home Assistant's timezone or DST offset changes.
+- Synchronizes an unset/invalid clock or detectable drift; full minute readback
+  allows a two-minute tolerance.
+- Handles the HPS10 zero-minute response without a repeated-correction loop.
+  Matching date/hour is partial readback, with a daily time refresh while connected.
+- Persists correction history and retry limits across restart. Failed corrections
+  wait at least an hour; normal controls remain usable when clock reads fail.
+- Hides the manual clock button by default. Inspection controls stay available for
+  the remaining physical test; extra diagnostic entities will be removed after testing.
 
-The owner-confirmed Rate 194 / More Hot Water upload matches all 678 stored bytes.
-The further clock check is independent of this release. Heating behavior and
-clock ticking still require physical verification.
+Update through HACS and restart Home Assistant Core once. If you are collecting
+an independent clock-ticking test, finish that capture on **2.0.0** before updating:
+automatic correction can conceal whether the heater advances time by itself.
 
-Update through HACS, then restart **Home Assistant Core once** to load version 2.
-Keep the existing integration and pairing. Normal settings and tariff changes
-work without a restart. Upgrading itself sends no clock or tariff writes.
+The software test suite covers clock drift, DST, partial readback, daily refresh,
+failed reads, disk failure, cancellation, restart persistence and existing controls.
+Physical RTC ticking and heating-event timing still require owner testing.
+No extra options, entities or user automations are required for clock maintenance.
+Standard Download diagnostics includes the maintenance record.
