@@ -1,47 +1,49 @@
-## AO Smith Local BLE 1.3.0
+## AO Smith Local BLE 1.3.1
 
-Adds **Diagnostic read status** and a persistent completion notification. Wait
-for the notification before downloading diagnostics. Extended reads now continue
-after optional registers return status 0x40, so the rejected preference candidate
-does not prevent later clock reads. Counts distinguish rejected and unread items.
+Fixes a reproduced false-success bug: a failed tariff upload could show an error,
+then a repeated callback could cache the plan and report success. A confirmed
+upload result is now required every time. Selected/cached rate information in
+1.3.0 alone does not prove that its schedule reached the heater.
 
-The experimental preference destination changes to **28:75**: the owner's latest
-capture reads `0000` there and rejects 28:113. The captured read packets have valid
-CRCs; the earlier “checksum rejected” message alone did not identify a bad CRC.
-There is no automatic alternate-address fallback.
+Fixes the blank configuration-menu choices by returning explicit labels, so they
+remain readable with stale or missing frontend translations.
 
-**Set heater clock (experimental)** sends HA-local time/date using the recovered
-app clock format, checks acknowledgement and readback, and records the result.
-This is an explicit next-generation trial; clock writes are not automatic at
-startup. An unsupported initial read does not prevent the requested trial.
+Clock and schedule writes now use fresh readback even if their acknowledgement
+is missing, without repeating the write. Empty success ACKs no longer count as
+register data. Command traffic and actual mismatched clock words remain available
+after an extended diagnostic scan. Explicit rejection still stops the operation.
 
-**Configure → Find and apply a tariff** restores the anonymous AO Smith API:
-ZIP → utility → plan → preference → upload. It generates five season blocks plus
-holiday/preference data, saves the original schedule durably before writes, and
-checks each chunk. With a cached tariff, the preference dropdown regenerates the
-whole schedule. Without one it remains a single-word experiment. New controls
-read the complete stored schedule and restore the original schedule; the latter
-backup survives HA restarts. An ambiguous upload stops without replaying writes.
+Tariff uploads now use a background task owned by the integration entry. HA
+shutdown or integration unload cancels the task, releases the BLE connection,
+and records the interrupted phase without repeating any write. The original
+schedule backup survives. The options flow reports cancellation instead of
+leaving an unhandled task result.
 
-**Integration version** shows the running version, downloaded version, and whether
-a restart is needed. Python code updates still require a **Home Assistant restart**;
-integration Reload cannot reliably load new code. No host/Unraid reboot is needed.
-Settings changes and tariff actions work without restarting HA after installation.
+Schedule generation runs off HA's main event loop. Capacity checks happen before
+event expansion; the actual tariff response is saved before generation and upload
+phases are logged to make a future failure diagnosable.
 
-### Try this release
+All **201 tests** pass, including false-success regression, missing/delayed ACKs,
+captured tariff comparison, HA shutdown during a partially transmitted write,
+backup preservation, cancellation on entry unload and menu-label coverage.
+Ruff and release archive checks also pass.
 
-1. Update through HACS and restart Home Assistant. Confirm Integration version is
-   **1.3.0**. Keep the existing pairing and close iCOMM.
-2. Press **Set heater clock (experimental)**.
-3. Enable **Inspect extended registers** and **Read stored tariff schedule** in
-   the entity list. Run each separately and wait for its completion notification,
-   then download diagnostics. The status includes incomplete/failed results too.
-4. Use **Configure → Find and apply a tariff** to select your actual plan. The
-   clock option can be disabled if testing the schedule separately. Allow several
-   minutes and retain the resulting diagnostics.
+The supplied full backup matches Rate 195 / More Savings in every season byte,
+while its separate preference word says More Hot Water. The later Rate 194 /
+More Hot Water attempt stopped during the clock trial with zero confirmed
+schedule chunks. Clock date/hour changed, but requested minutes read back as
+zero; correct timekeeping remains unresolved. The research report includes exact
+generated schedules for both actual API responses and all three preferences.
 
-The software suite passes 187 tests on HA 2025.12.5, with lint, formatting and
-archive checks. New clock/schedule writes have not been tested on the physical
-heater. Readback proves stored bytes, not clock ticking, DST handling or schedule
-activation. Live API access was unavailable from the development workspace;
-lookup is covered with fixtures and will run from your Home Assistant.
+The reported HAOS shutdown itself has **not** been reproduced or attributed to
+this integration. The screenshot shows services stopping and Supervisor waiting,
+not what initiated shutdown. These fixes address confirmed lifecycle defects;
+Core, Supervisor and host logs are still needed to identify the original trigger.
+
+Update through HACS and restart **Home Assistant Core only** to load the patch.
+Do not remove the integration or its saved pairing. If an upload was interrupted,
+download existing diagnostics and read the stored schedule before repeating it.
+To isolate the next Rate 194 / More Hot Water upload from the clock issue, leave
+the clock checkbox unchecked. Wait for completion, run **Read stored tariff
+schedule**, wait for its finished notification, then download diagnostics.
+This verifies schedule storage separately from correct clock/event execution.

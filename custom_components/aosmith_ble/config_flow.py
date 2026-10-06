@@ -1,5 +1,7 @@
 """Discovery, explicit enrollment, reuse, and polling options."""
 
+import asyncio
+import logging
 import re
 import secrets
 
@@ -24,8 +26,10 @@ from .const import (
 )
 from .coordinator import make_client
 from .protocol import ProtocolError, StatusError, validate_identifier
-from .schedule import PREFERENCES, build_schedule
+from .schedule import PREFERENCES
 from .tariff import TariffError, TariffLookup, cache_plan
+
+LOGGER = logging.getLogger(__name__)
 
 
 def suggested_pin(name):
@@ -224,6 +228,7 @@ class OptionsFlow(config_entries.OptionsFlow):
         self._candidate = None
         self._upload_task = None
         self._upload_error = None
+        self._upload_result = None
         self._preference = "More Hot Water"
         self._sync_clock = True
 
@@ -232,7 +237,15 @@ class OptionsFlow(config_entries.OptionsFlow):
         return self.async_create_entry(title="", data=options)
 
     async def async_step_init(self, user_input=None):
-        return self.async_show_menu(step_id="init", menu_options=["settings", "tariff", "remove_tariff"])
+        # Explicit labels also render when the frontend has stale/missing translations.
+        return self.async_show_menu(
+            step_id="init",
+            menu_options={
+                "settings": "Controls and readings",
+                "tariff": "Find and apply a tariff",
+                "remove_tariff": "Forget cached tariff",
+            },
+        )
 
     def _lookup(self):
         return TariffLookup(async_get_clientsession(self.hass))
@@ -327,18 +340,13 @@ class OptionsFlow(config_entries.OptionsFlow):
         detail = self._upload_error or ""
         if self._upload_error:
             errors["base"] = "tariff_apply_failed"
-            self._upload_error = None
         if user_input is not None:
             self._preference = user_input["preference"]
             self._sync_clock = user_input["sync_clock"]
-            try:
-                build_schedule(self._candidate, self._preference)
-            except (TariffError, ValueError) as err:
-                errors["base"] = "tariff_apply_failed"
-                detail = str(err)
-            else:
-                self._upload_task = None
-                return await self.async_step_tariff_apply()
+            self._upload_task = None
+            self._upload_error = None
+            self._upload_result = None
+            return await self.async_step_tariff_apply()
         return self.async_show_form(
             step_id="tariff_confirm",
             data_schema=vol.Schema(
@@ -362,24 +370,45 @@ class OptionsFlow(config_entries.OptionsFlow):
             if coordinator is None:
                 self._upload_error = "The water heater integration is not loaded"
                 return await self.async_step_tariff_confirm()
-            self._upload_task = self.hass.async_create_task(
+            self._upload_task = self.config_entry.async_create_background_task(
+                self.hass,
                 coordinator.async_apply_tariff(
                     self._candidate, self._preference, sync_clock=self._sync_clock
                 ),
                 "aosmith_tariff_upload",
+                eager_start=False,
             )
         if not self._upload_task.done():
             return self.async_show_progress(
                 step_id="tariff_apply", progress_action="uploading_tariff", progress_task=self._upload_task
             )
         try:
-            self._upload_task.result()
+            self._upload_result = self._upload_task.result()
+            if (
+                not isinstance(self._upload_result, dict)
+                or self._upload_result.get("outcome") != "readback_confirmed"
+            ):
+                self._upload_error = "The heater has not confirmed the tariff upload"
+        except asyncio.CancelledError:
+            self._upload_error = (
+                "Tariff upload was interrupted. No writes were repeated. "
+                "Download diagnostics before deciding whether to apply or restore the schedule."
+            )
         except (HomeAssistantError, TariffError, ValueError) as err:
-            self._upload_error = str(err)
+            self._upload_error = str(err) or type(err).__name__
+        except Exception:
+            LOGGER.exception("Unexpected tariff upload failure")
+            self._upload_error = "Unexpected tariff upload error; see Home Assistant logs and diagnostics"
         return self.async_show_progress_done(next_step_id="tariff_result")
 
     async def async_step_tariff_result(self, user_input=None):
-        if self._upload_error:
+        if (
+            self._upload_error
+            or not self._upload_result
+            or self._upload_result.get("outcome") != "readback_confirmed"
+        ):
+            if not self._upload_error:
+                self._upload_error = "The heater has not confirmed the tariff upload"
             return await self.async_step_tariff_confirm()
         return self._save(
             {

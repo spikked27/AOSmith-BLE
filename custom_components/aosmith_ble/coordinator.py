@@ -251,7 +251,11 @@ class HeaterCoordinator(DataUpdateCoordinator):
             if self.tariff_state is None:
                 self.tariff_state = await self.tariff_store.async_load() or {}
             try:
-                self.client.schedule_operation = {"time": self.local_now().isoformat(), "outcome": "not_sent"}
+                self.client.schedule_operation = {
+                    "time": self.local_now().isoformat(),
+                    "outcome": "not_sent",
+                    "phase": "preparing",
+                }
                 if restore:
                     schedule = self.tariff_state.get("original")
                     if not isinstance(schedule, dict):
@@ -260,12 +264,20 @@ class HeaterCoordinator(DataUpdateCoordinator):
                 else:
                     self.tariff_state["candidate_plan"] = plan
                     self.tariff_state["requested_preference"] = preference
-                    schedule = build_schedule(plan, preference)
+                    self.tariff_state["last_operation"] = self.client.schedule_operation
+                    # Preserve the real API input even if generation fails or HA is interrupted.
+                    await self.tariff_store.async_save(self.tariff_state)
+                    LOGGER.info("Preparing tariff schedule: %s", preference)
+                    schedule = await self.hass.async_add_executor_job(build_schedule, plan, preference)
                     self.tariff_state["generated_schedule"] = schedule
 
                 async def save_original(original):
                     if "original" not in self.tariff_state:
-                        state = {**self.tariff_state, "original": original}
+                        state = {
+                            **self.tariff_state,
+                            "original": original,
+                            "last_operation": self.client.schedule_operation,
+                        }
                         await self.tariff_store.async_save(state)
                         saved = await self.hass.async_add_executor_job(
                             _read_saved_preference, self.tariff_store.path
@@ -286,6 +298,11 @@ class HeaterCoordinator(DataUpdateCoordinator):
                 if not restore:
                     # Used by the preference selector until the options flow reloads this entry.
                     self.options.update({"tariff": plan, "tariff_preference": preference})
+            except asyncio.CancelledError:
+                self.client.schedule_operation["interrupted"] = True
+                self.client.schedule_operation["error"] = "Operation cancelled; no automatic write replay"
+                LOGGER.warning("Tariff operation interrupted; inspect diagnostics before retrying")
+                raise
             except (
                 BleakError,
                 TimeoutError,

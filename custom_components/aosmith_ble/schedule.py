@@ -142,6 +142,13 @@ def build_schedule(plan, preference):
     if preference not in PREFERENCES:
         raise ValueError("Choose a valid energy preference")
     plan = validate_plan(plan)
+    season_counts = {}
+    for event in plan["touEvents"]:
+        key = (event["month"], event["day"])
+        count = 2 if event["fromDayOfWeek"] == 0 and event["toDayOfWeek"] == 6 else 1
+        season_counts[key] = season_counts.get(key, 0) + count
+    if len(season_counts) > 5 or any(count > 20 for count in season_counts.values()):
+        raise ValueError("Exceeds the heater's five seasons / twenty event slots per season")
     if any(not 0 < event["rate"] < 10000 for event in plan["touEvents"]):
         raise ValueError("This schedule generator requires positive tariff prices below 10000")
     events = make_events(plan["touEvents"], PREFERENCES[preference])

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import threading
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
@@ -10,6 +11,8 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from test_client import IDENTIFIER, FakePeripheral, reply
@@ -65,6 +68,27 @@ def test_generated_schedule_matches_independently_recovered_fixture(preference):
     assert schedule["seasons"] == expected["season_blocks"]
     assert schedule["events"] == [{k: v for k, v in e.items() if k != "hex"} for e in expected["events"]]
     assert schedule["extra"]["words"][25:] == [expected["ble_preference_word"], 282, 307, 768]
+
+
+def test_actual_rate195_schedule_matches_saved_seasons_but_not_preference_word():
+    fixture = json.loads((ROOT / "research/observed_tariff_comparison.json").read_text())
+    saved = fixture["saved_original"]
+    generated = build_schedule(fixture["plans"]["195"], "More Savings")
+    assert generated["seasons"] == saved["seasons"]
+    # The separate word changed to More Hot Water while season bytes retained More Savings.
+    assert generated["extra"]["words"][25] == 0
+    assert saved["extra"]["words"][25] == 1
+    assert generated["extra"]["words"][:25] == saved["extra"]["words"][:25]
+    assert generated["extra"]["words"][26:] == saved["extra"]["words"][26:]
+    candidate = build_schedule(fixture["plans"]["194"], "More Hot Water")
+    assert candidate["seasons"] != saved["seasons"]
+    events = decode_season(candidate["seasons"][0]["value"])["events"]
+    assert [(e["hour"], e["days_of_week"], e["mode"]) for e in events] == [
+        (12, 62, 9),
+        (15, 62, 6),
+        (19, 62, 0),
+        (0, 65, 0),
+    ]
 
 
 def test_holiday_rules_and_unknown_holiday_are_not_silently_dropped():
@@ -127,6 +151,65 @@ async def test_clock_failure_does_not_replay_write(behavior):
         await client.set_clock(lambda: LOCAL)
     assert len(writes(peripheral)) == 1
     assert client.clock_operation["outcome"] == "unconfirmed"
+
+
+@pytest.mark.parametrize("ack", [None, 0x02, 0x04])
+async def test_clock_confirms_fresh_readback_with_different_or_missing_ack(ack):
+    client, peripheral = make_pair()
+    send = peripheral.send
+
+    def replace_ack(packet):
+        if packet[1] == 0x04:
+            if ack is not None:
+                send(reply(ack))
+            return
+        send(packet)
+
+    peripheral.send = replace_ack
+    result = await client.set_clock(lambda: LOCAL)
+    assert result["outcome"] == "readback_confirmed"
+    assert result["after"] == list(encode_clock(LOCAL))
+    assert len(writes(peripheral)) == 1
+    assert any(e.get("frame", "").startswith("BD40") for e in result["traffic"])
+    # An extended scan may evict the global ring; the command's evidence must survive.
+    await client.inspect_registers({str(i): (26, 3) for i in range(35)})
+    assert not any(e.get("frame", "").startswith("BD40") for e in client.events)
+    assert any(e.get("frame", "").startswith("BD40") for e in client.clock_operation["traffic"])
+
+
+async def test_clock_retains_actual_words_when_minutes_do_not_match():
+    client, peripheral = make_pair()
+    original = peripheral.write_gatt_char
+
+    async def drop_minutes(uuid, data, response):
+        await original(uuid, data, response)
+        if data[1] == 0x40:
+            peripheral.registers[(26, 3)] &= 0xFF
+
+    peripheral.write_gatt_char = drop_minutes
+    with pytest.raises(ProtocolError, match="Readback mismatch"):
+        await client.set_clock(lambda: LOCAL)
+    assert client.clock_operation["outcome"] == "unconfirmed"
+    assert client.clock_operation["after"] == [LOCAL.hour, encode_clock(LOCAL)[1]]
+    assert client.clock_operation["local_time"].endswith("19:00")
+    assert len(writes(peripheral)) == 1
+
+
+@pytest.mark.parametrize("echo", [b"", bytes((28, 75))])
+async def test_delayed_empty_write_ack_cannot_satisfy_preference_read(echo):
+    client, peripheral = make_pair()
+    original = peripheral.write_gatt_char
+
+    async def late_ack(uuid, data, response):
+        if data[1] == 0xA0 and data[3:5] == bytes((28, 75)) and writes(peripheral):
+            peripheral.send(reply(0x02, echo))
+        await original(uuid, data, response)
+
+    peripheral.write_gatt_char = late_ack
+    result = await client.test_energy_preference(1, AsyncMock())
+    assert result["outcome"] == "readback_confirmed" and result["after"] == 1
+    assert len(writes(peripheral)) == 1
+    assert any(e.get("frame", "").startswith("BD40") for e in result["traffic"])
 
 
 async def test_extended_read_continues_after_owner_status_40():
@@ -233,12 +316,18 @@ async def test_anonymous_api_query_and_errors():
 
 
 def entry():
-    return SimpleNamespace(
+    return ConfigEntry(
         entry_id="tariff_test",
         data={"address": "AA:BB:CC:DD:EE:FF"},
         options={},
-        pref_disable_polling=False,
-        async_on_unload=MagicMock(),
+        domain=DOMAIN,
+        version=1,
+        minor_version=2,
+        title="Test heater",
+        source="user",
+        unique_id=None,
+        discovery_keys={},
+        subentries_data=None,
     )
 
 
@@ -268,6 +357,116 @@ async def test_diagnostic_status_finishes_and_notifies_after_capture(tmp_path, s
     await hass.async_stop()
 
 
+async def test_options_menu_supplies_labels_without_frontend_translation_cache():
+    menu = await OptionsFlow().async_step_init()
+    assert menu["menu_options"] == {
+        "settings": "Controls and readings",
+        "tariff": "Find and apply a tariff",
+        "remove_tariff": "Forget cached tariff",
+    }
+
+
+async def test_upload_task_is_cancelled_on_entry_unload(tmp_path):
+    hass = HomeAssistant(str(tmp_path))
+    flow = OptionsFlow()
+    flow.hass = hass
+    flow._candidate = cache_plan(PLAN, "200", "Utility", "195", "195 Rate")
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def upload(*args, **kwargs):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    test_entry = entry()
+    hass.data[DOMAIN] = {test_entry.entry_id: SimpleNamespace(async_apply_tariff=upload)}
+    try:
+        with patch.object(OptionsFlow, "config_entry", new_callable=PropertyMock, return_value=test_entry):
+            await flow.async_step_tariff_confirm({"preference": "More Savings", "sync_clock": False})
+            await asyncio.wait_for(started.wait(), 1)
+            await asyncio.wait_for(hass.async_block_till_done(), 1)
+            await test_entry._async_process_on_unload(hass)
+            assert cancelled.is_set(), "The upload must stop when the integration unloads"
+            result = await flow.async_step_tariff_apply()
+            assert result["type"] == "progress_done"
+            result = await flow.async_step_tariff_result()
+            assert result["errors"]["base"] == "tariff_apply_failed"
+            assert "interrupted" in result["description_placeholders"]["detail"].lower()
+    finally:
+        if flow._upload_task and not flow._upload_task.done():
+            flow._upload_task.cancel()
+        if flow._upload_task:
+            await asyncio.gather(flow._upload_task, return_exceptions=True)
+        await hass.async_stop()
+
+
+async def test_ha_shutdown_cancels_partial_upload_and_preserves_backup(tmp_path):
+    hass = HomeAssistant(str(tmp_path))
+    client, peripheral = make_pair()
+    client._timeout = 10
+    sent = asyncio.Event()
+    original_write = peripheral.write_gatt_char
+
+    async def pause_after_write(uuid, data, response):
+        await original_write(uuid, data, response)
+        if data[1] == 0x40:
+            sent.set()
+            await asyncio.Event().wait()
+
+    peripheral.write_gatt_char = pause_after_write
+    test_entry = entry()
+    loop_thread = threading.get_ident()
+
+    def compile_off_loop(*args):
+        assert threading.get_ident() != loop_thread
+        return build_schedule(*args)
+
+    with (
+        patch("custom_components.aosmith_ble.coordinator.make_client", return_value=client),
+        patch("custom_components.aosmith_ble.coordinator.build_schedule", side_effect=compile_off_loop),
+    ):
+        coordinator = HeaterCoordinator(hass, test_entry)
+        coordinator.async_request_refresh = AsyncMock()
+
+        async def stop(_event):
+            await client.disconnect()
+
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, stop)
+        task = test_entry.async_create_background_task(
+            hass,
+            coordinator.async_apply_tariff(PLAN, "More Savings", sync_clock=False),
+            "test_upload",
+        )
+        try:
+            await asyncio.wait_for(sent.wait(), 2)
+            await asyncio.wait_for(hass.async_stop(force=True), 2)
+            assert task.cancelled()
+            assert not client._lock.locked() and not coordinator.command_lock.locked()
+            assert not peripheral.is_connected
+            assert len(writes(peripheral)) == 1
+            saved = json.loads(Path(coordinator.tariff_store.path).read_text())["data"]
+            assert saved["original"]["complete"]
+            assert saved["last_operation"]["interrupted"]
+            assert saved["last_operation"]["outcome"] == "partial_or_unconfirmed"
+            assert saved["last_operation"]["phase"] == "writing_holidays"
+        finally:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.parametrize("count", [21, 101])
+def test_oversized_tariff_is_rejected_before_expensive_generation(count):
+    plan = {"holidays": [], "touEvents": [dict(PLAN["touEvents"][0])] * count}
+    with patch("custom_components.aosmith_ble.schedule.make_events") as generator:
+        with pytest.raises((TariffError, ValueError), match="capacity|event slots"):
+            build_schedule(plan, "More Savings")
+        generator.assert_not_called()
+
+
 async def test_tariff_backup_survives_restart_and_is_not_replaced(tmp_path):
     hass = HomeAssistant(str(tmp_path))
     client, peripheral = make_pair()
@@ -287,8 +486,8 @@ async def test_tariff_backup_survives_restart_and_is_not_replaced(tmp_path):
     await hass.async_stop()
 
 
-@pytest.mark.parametrize("fails", [False, True])
-async def test_tariff_options_use_progress_and_save_only_confirmed_upload(tmp_path, fails):
+@pytest.mark.parametrize("outcome", ["readback_confirmed", "raises", "partial_or_unconfirmed", None])
+async def test_tariff_options_use_progress_and_save_only_confirmed_upload(tmp_path, outcome):
     hass = HomeAssistant(str(tmp_path))
     flow = OptionsFlow()
     flow.hass = hass
@@ -297,9 +496,9 @@ async def test_tariff_options_use_progress_and_save_only_confirmed_upload(tmp_pa
 
     async def upload(*args, **kwargs):
         await waiter.wait()
-        if fails:
+        if outcome == "raises":
             raise HomeAssistantError("Readback failed")
-        return {"outcome": "readback_confirmed"}
+        return {"outcome": outcome} if outcome else None
 
     coordinator = SimpleNamespace(async_apply_tariff=upload)
     test_entry = entry()
@@ -315,9 +514,22 @@ async def test_tariff_options_use_progress_and_save_only_confirmed_upload(tmp_pa
         result = await flow.async_step_tariff_apply()
         assert result["type"] == "progress_done"
         result = await flow.async_step_tariff_result()
-        if fails:
+        if outcome != "readback_confirmed":
             assert result["errors"]["base"] == "tariff_apply_failed"
-            assert "Readback failed" in result["description_placeholders"]["detail"]
+            detail = result["description_placeholders"]["detail"]
+            assert detail
+            # A browser refresh or duplicate progress callback must not turn failure into success.
+            result = await flow.async_step_tariff_result()
+            assert result["type"] == "form"
+            assert result["errors"]["base"] == "tariff_apply_failed"
+            assert result["description_placeholders"]["detail"] == detail
+            coordinator.async_apply_tariff = AsyncMock(return_value={"outcome": "readback_confirmed"})
+            await flow.async_step_tariff_confirm({"preference": "More Hot Water", "sync_clock": False})
+            await flow._upload_task
+            await flow.async_step_tariff_apply()
+            result = await flow.async_step_tariff_result()
+            assert result["type"] == "create_entry"
+            assert result["data"]["tariff_preference"] == "More Hot Water"
         else:
             assert result["type"] == "create_entry"
             assert result["data"]["tariff"]["tariff_id"] == "195"

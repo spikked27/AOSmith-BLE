@@ -103,10 +103,27 @@ The app also fetches tariff metadata from GraphQL and energy history from
 therefore assumed to equal the cloud lifetime counter. No arbitrary register
 write or opaque schedule-upload action is exposed. The dedicated writer accepts
 only five 124-byte seasons at blocks 21–25 and 29 words at 28:50–78. It saves
-the full original before mutation, verifies every write ACK and readback, and
+the full original before mutation, verifies fresh readback for every write, and
 retains the parameter-62 read. It writes all twenty event slots, including the
 two slots the app's BLE frame builder apparently omits. Firmware activation is
 not inferred from matching bytes.
+
+Version 1.3.1 accepts a matching 0x02 or 0x04 write response, records it, and
+still requires a separate read. If the ACK times out, it performs that read
+without repeating the write. Explicit rejection or disconnection still aborts.
+The actual heater's write-ACK layout has not yet been captured; accepting either
+opcode is compatibility logic, not a claimed observed response. Empty positive
+0x02 ACKs cannot satisfy register reads: successful reads must echo the address
+and contain exactly the requested words. Clock/schedule/preference operations
+retain bounded raw traffic separately from the rolling poll/extended-scan ring.
+
+October 5 owner captures read 26:3–4 as `0014 3545` after requesting
+`1014 3545` (20:16) and later `1814 3545` (20:24). The date/hour changed but the
+minute field did not match. A later preference read returned `0001` at 28:75
+after a reported confirmation error. The full saved season payloads match the
+actual Rate 195 API response generated with More Savings, despite that separate
+word indicating More Hot Water. See the observed comparison in
+[the research report](research/ONBOARDING_AND_TOU.md).
 
 
 ## Energy and restored tariff functionality

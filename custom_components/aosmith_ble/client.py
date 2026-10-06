@@ -140,7 +140,7 @@ class HeaterClient:
             if self._pending and not self._pending.done() and self._matcher and self._matcher(packet):
                 self._pending.set_result(packet)
 
-    async def _request(self, data: bytes, matcher) -> bytes:
+    async def _request(self, data: bytes, matcher, *, timeout=None) -> bytes:
         await asyncio.sleep(self._spacing)
         self._buffer = FrameBuffer()
         future = asyncio.get_running_loop().create_future()
@@ -150,7 +150,7 @@ class HeaterClient:
         else:
             self._record("tx_session", opcode=data[1])
         try:
-            async with asyncio.timeout(self._timeout):
+            async with asyncio.timeout(self._timeout if timeout is None else timeout):
                 await self._client.write_gatt_char(WRITE_UUID, data, response=True)
                 packet = await future
             check_status(packet)
@@ -232,8 +232,10 @@ class HeaterClient:
         def matches(packet):
             if packet[1] != 0x02:
                 return False
-            # A short error ACK has no register echo; never accept a different register.
-            return len(packet) == 5 or packet[3:5] == bytes(register)
+            # Empty success ACKs (including delayed write ACKs) are not register data.
+            if len(packet) == 5:
+                return packet[-2] != 0x80
+            return packet[3:5] == bytes(register) and (packet[-2] != 0x80 or len(packet) == 7 + count * 2)
 
         try:
             packet = await self._request(read_frame(block, parameter, count), matches)
@@ -343,21 +345,36 @@ class HeaterClient:
                     raise
         raise ProtocolError("No state received")
 
-    async def _write_words_confirmed(self, register, words):
-        """One write, explicit ACK, then readback. Never replay an uncertain write."""
+    async def _write_words_confirmed(self, register, words, *, record=None):
+        """One write followed by fresh readback; a missing ACK never triggers another write."""
         words = tuple(words)
         packet = write_words_frame(*register, words)
-        await self._request(
-            packet,
-            lambda reply: reply[1] == 0x04 and (len(reply) == 5 or reply[3:5] == bytes(register)),
-        )
+        detail = {"register": list(register), "requested_words": list(words)}
+        if record is not None:
+            record["last_write"] = detail
+        try:
+            ack = await self._request(
+                packet,
+                lambda reply: reply[1] in (0x02, 0x04) and (len(reply) == 5 or reply[3:5] == bytes(register)),
+                timeout=min(2, self._timeout),
+            )
+            detail["ack"] = ack.hex().upper()
+        except TimeoutError:
+            detail["ack"] = "Not received; checking readback without repeating the write"
         actual = await self._read_words(register, len(words))
+        detail["after"] = list(actual)
         if actual != words:
             raise ProtocolError(f"Readback mismatch at {register[0]}:{register[1]}; write was not repeated")
         return actual
 
     async def _set_clock(self, local_now):
-        operation = {"outcome": "not_sent", "experimental": True, "register": list(CLOCK)}
+        operation = {
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "outcome": "not_sent",
+            "experimental": True,
+            "register": list(CLOCK),
+            "traffic": [],
+        }
         self.clock_operation = operation
         self.commands.append(operation)
         try:
@@ -372,7 +389,7 @@ class HeaterClient:
             operation.update(
                 {"time": local.isoformat(), "requested_words": list(words), "outcome": "unconfirmed"}
             )
-            after = await self._write_words_confirmed(CLOCK, words)
+            after = await self._write_words_confirmed(CLOCK, words, record=operation)
             operation.update(
                 {
                     "outcome": "readback_confirmed",
@@ -387,6 +404,11 @@ class HeaterClient:
                 str(err) if isinstance(err, (ProtocolError, ValueError)) else type(err).__name__
             )
             raise
+        finally:
+            if (after := operation.get("last_write", {}).get("after")) is not None:
+                operation["after"] = after
+                operation["local_time"] = decode_clock(after)
+            operation["traffic"][:] = [e for e in self.events if e["time"] >= operation["started_at"]]
 
     async def set_clock(self, local_now):
         async with self._lock:
@@ -446,39 +468,61 @@ class HeaterClient:
                 "confirmed_chunks": 0,
                 "activation_verified": False,
                 "preference": schedule.get("preference"),
+                "phase": "reading_original",
+                "traffic": [],
             }
             self.schedule_operation = operation
             self.commands.append(operation)
             try:
+                LOGGER.info("Tariff upload: reading the original schedule")
                 await self._ensure_session()
                 original = await self._capture_schedule()
                 if not original["complete"]:
                     raise ProtocolError(
                         "Could not read the full existing schedule; see schedule_capture in diagnostics"
                     )
+                operation["phase"] = "saving_original"
                 await save_original(original)
                 if local_now is not None:
+                    operation["phase"] = "setting_clock"
+                    LOGGER.info("Tariff upload: setting the heater clock")
                     await self._set_clock(local_now)
                 operation["outcome"] = "partial_or_unconfirmed"
+                operation["phase"] = "writing_holidays"
+                LOGGER.info("Tariff upload: writing holiday and preference data")
                 extra = schedule["extra"]
                 # Holiday rules and preference/threshold/lead-time data first.
                 for offset in range(0, 29, 6):
                     register = (28, 50 + offset)
                     operation["last_register"] = list(register)
-                    await self._write_words_confirmed(register, extra["words"][offset : offset + 6])
+                    await self._write_words_confirmed(
+                        register, extra["words"][offset : offset + 6], record=operation
+                    )
                     operation["confirmed_chunks"] += 1
                 for block in schedule["seasons"]:
+                    operation["phase"] = f"writing_season_{block['block']}"
+                    LOGGER.info("Tariff upload: writing season block %s", block["block"])
                     words = season_words(block)
                     # Header, then all twenty event slots. Include the app builder's omitted tail.
                     for start, count in [(0, 2)] + [(i, 6) for i in range(2, 62, 6)]:
                         register = (block["block"], start)
                         operation["last_register"] = list(register)
-                        await self._write_words_confirmed(register, words[start : start + count])
+                        await self._write_words_confirmed(
+                            register, words[start : start + count], record=operation
+                        )
                         operation["confirmed_chunks"] += 1
                     checksum = await self._read((block["block"], 62))
                     operation.setdefault("season_check_words", {})[str(block["block"])] = checksum
                 operation["outcome"] = "readback_confirmed"
+                operation["phase"] = "complete"
+                LOGGER.info("Tariff upload complete: %s chunks confirmed", operation["confirmed_chunks"])
                 return dict(operation)
+            except asyncio.CancelledError:
+                operation["interrupted"] = True
+                operation["error"] = "Upload cancelled; no automatic write replay"
+                LOGGER.warning("Tariff upload cancelled during %s", operation["phase"])
+                await self._close()
+                raise
             except (BleakError, TimeoutError, ProtocolError, ValueError) as err:
                 operation["error"] = (
                     str(err) if isinstance(err, (ProtocolError, ValueError)) else type(err).__name__
@@ -488,6 +532,9 @@ class HeaterClient:
             except BaseException:
                 await self._close()
                 raise
+
+            finally:
+                operation["traffic"][:] = [e for e in self.events if e["time"] >= operation["time"]]
 
     async def test_energy_preference(self, value: int, save_original, *, restoring=False):
         """Try the readable contiguous candidate; one write, no address fallback.
@@ -507,6 +554,7 @@ class HeaterClient:
                 "restoring": restoring,
                 "outcome": "not_sent",
                 "behavior_verified": False,
+                "traffic": [],
             }
             self.commands.append(command)
             try:
@@ -540,6 +588,8 @@ class HeaterClient:
             except BaseException:
                 await self._close()
                 raise
+            finally:
+                command["traffic"][:] = [e for e in self.events if e["time"] >= command["time"]]
 
     async def set_value(self, register, value: int, *, expected_mode=None) -> HeaterState:
         async with self._lock:

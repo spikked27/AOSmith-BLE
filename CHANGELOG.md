@@ -1,3 +1,25 @@
+# 1.3.1 — October 5, 2026
+
+- Prevent a failed upload from becoming success on repeated options-flow result
+  callbacks. Cache the selected plan only after a confirmed upload result.
+- Read back clock/schedule writes after a missing ACK without replaying the write;
+  reject empty success ACKs as read data. Retain command traffic and mismatched
+  clock words after extended scans for the next hardware trial.
+- Send explicit options-menu labels so the three choices remain visible with
+  stale or missing frontend translations.
+- Tie tariff upload tasks to the config entry and cancel them on unload/shutdown.
+  Report cancellation in the options flow, preserve partial-write diagnostics and
+  retain the original backup; never automatically replay interrupted writes.
+- Move schedule compilation to HA's executor and validate capacity before event
+  expansion. Save the actual API input before compilation and log upload phases.
+- Add regression coverage for entry unload, HA shutdown during a partial write,
+  main-loop task tracking, capacity checks and visible menu labels. 201 tests pass.
+- Compare actual Rate 194/195 API inputs with the full original backup: season
+  bytes match 195 / More Savings despite the More Hot Water preference word.
+  Document all generated preferences and the unresolved zero-minute clock reads.
+- The owner-reported HAOS shutdown trigger is not established by the screenshot;
+  these fixes address reproduced lifecycle defects without claiming a root cause.
+
 # 1.3.0 — October 5, 2026
 
 - Add diagnostic read status and a persistent finished notification. Continue

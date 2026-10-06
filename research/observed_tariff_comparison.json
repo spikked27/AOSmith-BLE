@@ -1,0 +1,336 @@
+{
+  "source": "Public tariff API fields and schedule bytes extracted from owner-supplied October 5 diagnostics; no pairing, device, account, ZIP or capture identifiers.",
+  "plans": {
+    "195": {
+      "tariff_id": "3439409",
+      "tariff_name": "195 \u2014 Residential",
+      "touEvents": [
+        {
+          "month": 6,
+          "day": 1,
+          "fromDayOfWeek": 0,
+          "toDayOfWeek": 4,
+          "hour": 15,
+          "minute": 0,
+          "rate": 0.540372,
+          "mode": 0,
+          "modeData": 0
+        },
+        {
+          "month": 6,
+          "day": 1,
+          "fromDayOfWeek": 0,
+          "toDayOfWeek": 4,
+          "hour": 6,
+          "minute": 0,
+          "rate": 0.278,
+          "mode": 0,
+          "modeData": 0
+        },
+        {
+          "month": 6,
+          "day": 1,
+          "fromDayOfWeek": 0,
+          "toDayOfWeek": 4,
+          "hour": 19,
+          "minute": 0,
+          "rate": 0.278,
+          "mode": 0,
+          "modeData": 0
+        },
+        {
+          "month": 6,
+          "day": 1,
+          "fromDayOfWeek": 5,
+          "toDayOfWeek": 6,
+          "hour": 6,
+          "minute": 0,
+          "rate": 0.278,
+          "mode": 0,
+          "modeData": 0
+        },
+        {
+          "month": 6,
+          "day": 1,
+          "fromDayOfWeek": 0,
+          "toDayOfWeek": 6,
+          "hour": 22,
+          "minute": 0,
+          "rate": 0.12872,
+          "mode": 0,
+          "modeData": 0
+        },
+        {
+          "month": 10,
+          "day": 1,
+          "fromDayOfWeek": 0,
+          "toDayOfWeek": 4,
+          "hour": 15,
+          "minute": 0,
+          "rate": 0.518057,
+          "mode": 0,
+          "modeData": 0
+        },
+        {
+          "month": 10,
+          "day": 1,
+          "fromDayOfWeek": 0,
+          "toDayOfWeek": 4,
+          "hour": 6,
+          "minute": 0,
+          "rate": 0.23209999999999997,
+          "mode": 0,
+          "modeData": 0
+        },
+        {
+          "month": 10,
+          "day": 1,
+          "fromDayOfWeek": 0,
+          "toDayOfWeek": 4,
+          "hour": 19,
+          "minute": 0,
+          "rate": 0.23209999999999997,
+          "mode": 0,
+          "modeData": 0
+        },
+        {
+          "month": 10,
+          "day": 1,
+          "fromDayOfWeek": 5,
+          "toDayOfWeek": 6,
+          "hour": 6,
+          "minute": 0,
+          "rate": 0.23209999999999997,
+          "mode": 0,
+          "modeData": 0
+        },
+        {
+          "month": 10,
+          "day": 1,
+          "fromDayOfWeek": 0,
+          "toDayOfWeek": 6,
+          "hour": 22,
+          "minute": 0,
+          "rate": 0.12852,
+          "mode": 0,
+          "modeData": 0
+        }
+      ],
+      "holidays": [
+        {
+          "calendarEventId": 2,
+          "calendarEventName": "New Year's Day"
+        },
+        {
+          "calendarEventId": 10,
+          "calendarEventName": "Memorial Day"
+        },
+        {
+          "calendarEventId": 12,
+          "calendarEventName": "Independence Day"
+        },
+        {
+          "calendarEventId": 17,
+          "calendarEventName": "Veterans Day"
+        },
+        {
+          "calendarEventId": 18,
+          "calendarEventName": "Christmas Day"
+        },
+        {
+          "calendarEventId": 20,
+          "calendarEventName": "Martin Luther King Jr's BD (Observed)"
+        },
+        {
+          "calendarEventId": 21,
+          "calendarEventName": "President's Day"
+        },
+        {
+          "calendarEventId": 27,
+          "calendarEventName": "Labor Day"
+        },
+        {
+          "calendarEventId": 30,
+          "calendarEventName": "Columbus Day (Traditional)"
+        },
+        {
+          "calendarEventId": 34,
+          "calendarEventName": "Thanksgiving Day"
+        }
+      ]
+    },
+    "194": {
+      "tariff_id": "3439408",
+      "tariff_name": "194 \u2014 Residential",
+      "touEvents": [
+        {
+          "month": 6,
+          "day": 1,
+          "fromDayOfWeek": 0,
+          "toDayOfWeek": 4,
+          "hour": 15,
+          "minute": 0,
+          "rate": 0.49321,
+          "mode": 0,
+          "modeData": 0
+        },
+        {
+          "month": 6,
+          "day": 1,
+          "fromDayOfWeek": 0,
+          "toDayOfWeek": 4,
+          "hour": 19,
+          "minute": 0,
+          "rate": 0.22483599999999998,
+          "mode": 0,
+          "modeData": 0
+        },
+        {
+          "month": 6,
+          "day": 1,
+          "fromDayOfWeek": 5,
+          "toDayOfWeek": 6,
+          "hour": 0,
+          "minute": 0,
+          "rate": 0.22483599999999998,
+          "mode": 0,
+          "modeData": 0
+        },
+        {
+          "month": 10,
+          "day": 1,
+          "fromDayOfWeek": 0,
+          "toDayOfWeek": 4,
+          "hour": 15,
+          "minute": 0,
+          "rate": 0.485553,
+          "mode": 0,
+          "modeData": 0
+        },
+        {
+          "month": 10,
+          "day": 1,
+          "fromDayOfWeek": 0,
+          "toDayOfWeek": 4,
+          "hour": 19,
+          "minute": 0,
+          "rate": 0.208436,
+          "mode": 0,
+          "modeData": 0
+        },
+        {
+          "month": 10,
+          "day": 1,
+          "fromDayOfWeek": 5,
+          "toDayOfWeek": 6,
+          "hour": 0,
+          "minute": 0,
+          "rate": 0.208436,
+          "mode": 0,
+          "modeData": 0
+        }
+      ],
+      "holidays": [
+        {
+          "calendarEventId": 2,
+          "calendarEventName": "New Year's Day"
+        },
+        {
+          "calendarEventId": 10,
+          "calendarEventName": "Memorial Day"
+        },
+        {
+          "calendarEventId": 12,
+          "calendarEventName": "Independence Day"
+        },
+        {
+          "calendarEventId": 17,
+          "calendarEventName": "Veterans Day"
+        },
+        {
+          "calendarEventId": 18,
+          "calendarEventName": "Christmas Day"
+        },
+        {
+          "calendarEventId": 20,
+          "calendarEventName": "Martin Luther King Jr's BD (Observed)"
+        },
+        {
+          "calendarEventId": 21,
+          "calendarEventName": "President's Day"
+        },
+        {
+          "calendarEventId": 27,
+          "calendarEventName": "Labor Day"
+        },
+        {
+          "calendarEventId": 30,
+          "calendarEventName": "Columbus Day (Traditional)"
+        },
+        {
+          "calendarEventId": 34,
+          "calendarEventName": "Thanksgiving Day"
+        }
+      ]
+    }
+  },
+  "saved_original": {
+    "seasons": [
+      {
+        "block": 21,
+        "value": "060100000300003E09000600003E06000F00003E07001300003E06001600003E0000030000410900060000410600160000410000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      {
+        "block": 22,
+        "value": "0A0100000300003E09000600003E06000F00003E07001300003E06001600003E0000030000410900060000410600160000410000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      {
+        "block": 23,
+        "value": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      {
+        "block": 24,
+        "value": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      {
+        "block": 25,
+        "value": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "extra": {
+      "block": 28,
+      "parameter": 50,
+      "words": [
+        4288,
+        20522,
+        29248,
+        46464,
+        52416,
+        4122,
+        8218,
+        36874,
+        40978,
+        45093,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        282,
+        307,
+        768
+      ]
+    }
+  }
+}

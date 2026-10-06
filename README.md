@@ -142,10 +142,14 @@ fault does not verify its time or timezone.
 
 **Set heater clock (experimental)** sends the current time in Home Assistant's
 configured timezone, using the app's known two-word clock format at 26:3–4. It
-records the initial read, write acknowledgement and readback in diagnostics.
+records the initial read, any write acknowledgement, and fresh readback in diagnostics.
 An unsupported initial clock read does not prevent this explicitly requested
 write trial. The next-generation clock mapping, continued ticking and DST
 handling remain hardware-unverified. No clock write occurs on startup or polling.
+The October 5 trial changed the date/hour words, but the requested minutes read
+back as zero. That result does not establish a correctly running clock. Version
+1.3.1 records the actual mismatched words and retains the command's traffic after
+an extended scan. A missing acknowledgement triggers a read, never a repeated write.
 
 ### Utility tariffs and energy preferences (experimental)
 
@@ -235,6 +239,24 @@ not abandoned entities. User-enabled debug buttons remain enabled on later updat
   unavailable; they do not report zero energy or a healthy heater.
 - **Command failed:** refresh before repeating it. A lost response can mean the
   setting changed without confirmation. Writes are not automatically replayed.
+- **Blank configuration menu:** version 1.3.1 sends visible labels directly,
+  including when the frontend has stale or missing translation strings.
+- **Tariff appeared successful in 1.3.0:** a repeated result callback could clear
+  a previous failure and save the selected plan as if it succeeded. Version 1.3.1
+  requires a confirmed upload result even after refresh/repeated callbacks.
+  Cached options alone do not prove that the heater received a tariff. Inspect
+  `tariff_state.last_operation` and read the stored schedule to check its bytes.
+- **Clock blocks tariff upload:** leave the clock checkbox unchecked to test
+  schedule storage separately. This does not establish that events will run at
+  the correct local time; the clock still needs independent verification.
+- **Interrupted tariff upload:** version 1.3.1 cancels the options-flow upload
+  during integration unload or HA shutdown. Its original backup and last phase
+  remain in diagnostics. Read the stored schedule before deciding to apply or
+  restore; an interrupted upload may have written only part of it.
+- **Unexpected HA/host shutdown:** collect Core, Supervisor and host logs around
+  the event, along with integration diagnostics. A shutdown-console screenshot
+  shows shutdown progress, not what requested it. Tariff generation now runs off
+  HA's main loop and capacity is checked before event expansion.
 
 For a report, enable **debug logging** on the integration entry, reproduce the
 problem, then disable logging to download the log and select **Download

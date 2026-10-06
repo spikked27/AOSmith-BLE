@@ -324,6 +324,64 @@ The unresolved facts are the installed device's profile, its exact downloaded
 tariff and stored schedule, its actual RTC value and synchronization source,
 DST handling, firmware activation timing, and physical response to event modes.
 
+## October 5 hardware captures, analyzed for 1.3.1
+
+The later owner-supplied diagnostics contain the actual anonymous API responses
+for PSEG Long Island rates 195 (`3439409`) and 194 (`3439408`), plus a complete
+backup of five stored seasons and holiday/extra data. The public tariff fields
+and schedule bytes are preserved in `observed_tariff_comparison.json`; device,
+account, pairing and location identifiers are excluded. These observations
+resolve the earlier missing-input/readability questions above.
+
+Both API responses define June 1 and October 1 seasons. Their prices differ,
+but each rate generates the same event times and modes in both seasons under
+the recovered default thresholds and three-hour lead. The exact replay is:
+
+| Rate 195 event | More Hot Water | More Savings | Most Savings |
+|---|---:|---:|---:|
+| Every day 03:00 | 9 | 9 | 9 |
+| Every day 06:00 | 0 | 6 | 6 |
+| Weekdays 15:00 | 6 | 7 | 8 |
+| Weekdays 19:00 | 0 | 6 | 6 |
+| Every day 22:00 | 0 | 0 | 0 |
+
+| Rate 194 event | More Hot Water | More Savings | Most Savings |
+|---|---:|---:|---:|
+| Weekdays 12:00 | 9 | 9 | 9 |
+| Weekdays 15:00 | 6 | 7 | 8 |
+| Weekdays 19:00 | 0 | 0 | 0 |
+| Weekends 00:00 | 0 | 0 | 0 |
+
+Mode 9 is load-up; 6/7/8 are the app's DR1/DR2/DR3 levels; 0 is baseline,
+not heater-off. The tables describe stored events, not measured element or
+compressor behavior. Holiday rules are also uploaded; these tables show the
+ordinary weekly events. They are computed from the captured API response, not
+an independent live-price lookup or a tariff-price guarantee.
+
+All five backed-up season payloads match the Rate 195 / More Savings replay
+byte-for-byte. The holiday and threshold/lead-time words also match. However,
+the separate preference word is `0001` (More Hot Water), after the owner's
+word-only trial. Thus the word and stored schedule can disagree; changing that
+word is not evidence that the full season schedule was regenerated. The backup
+predates the Rate 194 attempt and does not prove the integration installed it.
+
+The Rate 194 / More Hot Water attempt records zero confirmed schedule chunks
+and a timeout during its requested clock trial. Nevertheless, 1.3.0 cached the
+new options. A reproduced options-flow defect explains how a repeated result
+callback could show an error, clear it, then save the plan as successful. 1.3.1
+requires an independently retained `readback_confirmed` task result before
+saving, including after repeated callbacks or page refreshes.
+
+The clock request packed 20:16 as `1014 3545`, then 20:24 as `1814 3545`.
+Subsequent independent reads returned `0014 3545`: the expected date/hour but
+zero minutes. Existing 1.3.0 traffic rolled out during the extended scan, so the
+actual write acknowledgement is unknown. Neither successful RTC synchronization
+nor ticking is established. 1.3.1 reads back after a missing ACK without repeating
+the write and retains command traffic and actual mismatched words. A schedule
+trial with clock synchronization unchecked can isolate schedule storage from
+this unresolved clock behavior. Official-app Bluetooth capture remains the next
+source of direct evidence if this enhanced diagnostic trial does not resolve it.
+
 ## Primary sources
 
 - Supplied iCOMM 14.1.0 APK identified above; recovered function/module references

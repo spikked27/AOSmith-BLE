@@ -88,6 +88,8 @@ def validate_plan(data):
     events, holidays = data.get("touEvents"), data.get("holidays")
     if not isinstance(events, list) or not events or not isinstance(holidays, list):
         raise TariffError("Missing tariff events or holidays")
+    if len(events) > 100 or len(holidays) > 25:
+        raise TariffError("Tariff exceeds the heater's 100 event / 25 holiday capacity")
     cleaned = []
     fields = ("month", "day", "fromDayOfWeek", "toDayOfWeek", "hour", "minute", "rate", "mode", "modeData")
     for event in events:
