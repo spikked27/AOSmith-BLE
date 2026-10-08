@@ -1,6 +1,8 @@
-## AO Smith Local BLE 3.0.0
+## AO Smith Local BLE 3.0.1
 
 A public release with transition-based clock verification and a clean device page.
+Version 3.0.1 also keeps normal readings available if an older saved tariff cannot
+be reconstructed; clock verification pauses until the tariff is valid.
 
 - **Clock synchronization** watches the selected tariff's live DR transitions.
   A missed transition raises **Clock desync detected** and a notification, with

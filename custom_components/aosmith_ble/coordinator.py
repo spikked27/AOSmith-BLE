@@ -141,7 +141,7 @@ class HeaterCoordinator(DataUpdateCoordinator):
                     self.clock_guard.reset_observations("Tariff update in progress")
                 else:
                     await self.clock_guard.async_observe(state)
-            except (OSError, ValueError, KeyError, TypeError) as err:
+            except (OSError, ValueError, KeyError, TypeError, TariffError) as err:
                 # A malformed/unavailable tariff must not hide the heater's core readings.
                 self.clock_guard.unavailable("Clock verification data unavailable")
                 LOGGER.warning("Clock verification unavailable: %s", type(err).__name__)

@@ -1,8 +1,8 @@
-# Version 3.0.0 validation
+# Version 3.0.1 validation
 
 Reviewed October 7, 2026. Automated checks use Python 3.13.15 and Home Assistant
 2025.12.5, the supported minimum series. The owner's installation runs HA 2026.9.4.
-**281 tests pass locally**, plus Ruff lint/format and release archive validation.
+**282 tests pass locally**, plus Ruff lint/format and release archive validation.
 The GitHub Tests workflow gates publication of the versioned release.
 
 ## Software coverage

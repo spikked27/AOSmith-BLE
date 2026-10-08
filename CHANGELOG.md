@@ -1,3 +1,9 @@
+# 3.0.1 — October 7, 2026
+
+- Keep normal heater readings available if a saved tariff from an older version
+  fails validation while rebuilding the clock-check schedule. Pause clock checks
+  and report unavailable verification data. Add the upgrade regression.
+
 # 3.0.0 — October 7, 2026
 
 - Verify actual value-changing tariff transitions through 27:0, with a three-minute

@@ -392,3 +392,14 @@ async def test_corrupt_tariff_disables_guard_without_losing_core_readings(harnes
     assert await h.coordinator._async_update_data() == reading
     assert h.coordinator.clock_guard.data["status"] == "Check unavailable"
     h.client.set_clock.assert_not_awaited()
+
+
+async def test_corrupt_legacy_plan_does_not_interrupt_core_readings(harness):
+    h = harness
+    del h.coordinator.tariff_state["applied_schedule"]
+    h.coordinator.tariff_state["applied_plan"] = {"invalid": "older saved plan"}
+    reading = state(BOUNDARY)
+    h.client.read_state.return_value = reading
+    assert await h.coordinator._async_update_data() == reading
+    assert h.coordinator.clock_guard.data["status"] == "Check unavailable"
+    h.client.set_clock.assert_not_awaited()
