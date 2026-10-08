@@ -1,5 +1,7 @@
 # AO Smith Local BLE
 
+<img src="https://raw.githubusercontent.com/spikked27/AOSmith-BLE/main/custom_components/aosmith_ble/brand/logo.png" alt="A. O. Smith" width="240">
+
 [![Release](https://img.shields.io/github/v/release/spikked27/AOSmith-BLE)](https://github.com/spikked27/AOSmith-BLE/releases)
 [![Tests](https://github.com/spikked27/AOSmith-BLE/actions/workflows/tests.yml/badge.svg)](https://github.com/spikked27/AOSmith-BLE/actions/workflows/tests.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5?logo=homeassistant&logoColor=white)](https://hacs.xyz/)
@@ -28,7 +30,8 @@ This is an independent community integration, not an official A. O. Smith produc
 | Hot water availability | Low, Medium and High displayed as 0%, 50% and 100% |
 | Energy usage | Cumulative kWh, compatible with the Energy dashboard |
 | Error status | Current fault description and code |
-| Automatic clock maintenance | Checks at startup, after connection recovery and hourly at minute 2 |
+| Manual clock setting | Explicit Synchronize clock button; no automatic writes |
+| DR investigation | Read-only snapshots and bounded monitoring with timestamped register differences |
 
 Version 2 keeps everyday controls on the device page and diagnostic tools disabled
 by default. Existing pairing credentials, entity identities and saved tariff data
@@ -84,7 +87,7 @@ are never deleted. Home Assistant backups preserve the credentials.
 1. Open the integration's **Configure** gear.
 2. Enter your ZIP code, choose your utility and rate plan, then select a savings
    preference. Lookup uses AO Smith's anonymous tariff service.
-3. Submit and wait for completion. Home Assistant synchronizes the heater clock,
+3. Submit and wait for completion. Home Assistant
    uploads the generated schedule and checks each written portion. This can take
    several minutes.
 4. **Electricity tariff** displays the configured plan, for example **PSEG 194**.
@@ -136,29 +139,55 @@ not measured remaining gallons. Other raw codes display Unknown.
 **Energy:** the cumulative kWh sensor can be added to the Energy dashboard.
 Instantaneous power and historical cloud data are not provided.
 
-**Clock:** time maintenance is automatic, using Home Assistant's configured
-local time and timezone. It reads the heater clock on startup, after a failed
-connection recovers, and on the first normal poll at or after **:02 each hour**.
-This allows the heater to advance into the new hour before comparison.
-A timezone or DST offset change causes
-a check on the next normal poll. Invalid dates, the clock-unset fault, or detectable
-drift trigger synchronization. Full minute readback allows a two-minute tolerance.
+**Clock:** automatic setting is removed in 2.2.0. Startup, reconnects, polling,
+DST/timezone changes, tariff uploads and savings changes never set the clock.
+Use **Synchronize clock** explicitly when needed. This button uses Home Assistant's
+configured local timezone and retains its acknowledgement/readback in diagnostics.
+It is re-enabled on upgrade only if the integration previously disabled it; a
+user-disabled button stays disabled.
 
-On HPS10 firmware that returns zero minutes, matching date/hour is treated as
-partial readback, with a short grace period around hour boundaries. The integration
-refreshes local time on the first hourly check after 24 hours have elapsed since
-the last synchronization, because minute drift cannot be measured reliably through
-that response. Failed writes wait at
-least an hour before another automatic attempt; successful writes have a five-minute
-minimum interval. These limits survive restarts. Missing clock responses never
-trigger blind writes, and clock errors leave normal heater readings usable.
+The observed 26:3–4 readback may retain the last written date/hour with zero
+minutes. It is not a verified running clock and must not trigger drift correction.
 
-Tariff setup still synchronizes time before uploading. Manual synchronization is
-retained as a disabled diagnostic button during testing, and its result contributes
-to the automatic refresh history. No user settings or automations are required.
-Clock maintenance runs locally while Home Assistant and the heater are connected;
-it cannot correct the heater while Home Assistant is offline. Readback still does
-not prove autonomous ticking or the physical timing of heating events.
+### Investigating active demand response
+
+Enable **Capture DR status**, **Monitor DR for 3 hours**, **Stop DR monitoring** and
+optionally **DR monitoring status** in the device's disabled entities.
+
+1. Press **Capture DR status** for one snapshot, or **Monitor DR for 3 hours** well
+   before a tariff boundary. The monitor captures immediately, then approximately
+   once per minute. A capture can take about 15 seconds; each register has its own
+   read timestamp, so a snapshot is not an atomic device-wide measurement.
+2. Leave the heater connected through the transition. Keep its mode, setpoint,
+   tariff and clock unchanged during the observation to make comparisons useful.
+3. Wait for completion or press **Stop DR monitoring**. Download the integration's
+   diagnostics. `dr_diagnostics.captures` contains raw decimal/hex values, rejected
+   or unread addresses, host timezone, clock-write context, and differences from
+   the previous capture. The last 400 captures survive reload/restart; monitoring
+   stops on unload/restart and does not restart itself. Starting a session keeps
+   existing captures, evicting the oldest only when the history limit is reached.
+
+The capture reads all 26 words in the app-declared block 27 plus the existing
+known control, clock, preference and energy context. It skips the already rejected
+28:113 candidate. No heater register writes or pairing enrollment are sent.
+Unmapped words remain explicitly unmapped; `active_dr_level` remains unknown.
+A changing word is a candidate for further verification, not proof of DR1/DR2
+or a compressor/element status mapping. Separately read multiword energy values
+are raw research data; use the normal energy sensor for cumulative consumption.
+
+For a different observation length, use **Developer tools → Actions → AO Smith
+Local BLE: Start DR monitoring**, select the heater, and choose 1–360 minutes.
+The `aosmith_ble.capture_dr_status` and `aosmith_ble.stop_dr_monitor` actions are
+also available. These actions can be used in your own HA automations.
+
+### Branding
+
+AO Smith's existing Home Assistant brand assets are bundled for light/dark themes
+and normal/high-density displays. Home Assistant 2026.3+ serves these locally.
+The logo is also shown in the README/HACS detail page. The current HACS downloads
+list still uses the old brands CDN and can show a placeholder for bundled custom
+icons ([upstream issue](https://github.com/hacs/integration/issues/5223)); this
+integration does not patch HACS. Older HA versions retain their previous icon.
 
 ## Updates and troubleshooting
 

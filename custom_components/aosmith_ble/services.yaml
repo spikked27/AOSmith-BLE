@@ -29,3 +29,44 @@ set_timed_mode:
           max: 100
           step: 1
           mode: box
+
+capture_dr_status:
+  name: Capture DR status
+  description: Read status registers once and save their raw values and differences in integration diagnostics. Does not change heater settings.
+  fields:
+    config_entry_id:
+      name: Water heater
+      required: true
+      selector:
+        config_entry:
+          integration: aosmith_ble
+
+start_dr_monitor:
+  name: Start DR monitoring
+  description: Capture raw status once per minute for a limited time. Stops automatically; does not resume after a restart or change heater settings.
+  fields:
+    config_entry_id:
+      name: Water heater
+      required: true
+      selector:
+        config_entry:
+          integration: aosmith_ble
+    duration_minutes:
+      name: Duration
+      default: 180
+      selector:
+        number:
+          min: 1
+          max: 360
+          unit_of_measurement: min
+
+stop_dr_monitor:
+  name: Stop DR monitoring
+  description: Stop the current read-only monitoring session. Saved captures remain available in integration diagnostics.
+  fields:
+    config_entry_id:
+      name: Water heater
+      required: true
+      selector:
+        config_entry:
+          integration: aosmith_ble

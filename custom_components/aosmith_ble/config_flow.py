@@ -43,7 +43,7 @@ def is_heater(info):
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
-    MINOR_VERSION = 4
+    MINOR_VERSION = 5
 
     def __init__(self):
         self._address = ""
@@ -227,7 +227,6 @@ class OptionsFlow(config_entries.OptionsFlow):
         self._upload_error = None
         self._upload_result = None
         self._preference = "More Hot Water"
-        self._sync_clock = True
 
     def _save(self, updates):
         options = clean_options({**self.config_entry.options, **updates})
@@ -341,9 +340,7 @@ class OptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_tariff_confirm()
             self._upload_task = self.config_entry.async_create_background_task(
                 self.hass,
-                coordinator.async_apply_tariff(
-                    self._candidate, self._preference, sync_clock=self._sync_clock
-                ),
+                coordinator.async_apply_tariff(self._candidate, self._preference),
                 "aosmith_tariff_upload",
                 eager_start=False,
             )

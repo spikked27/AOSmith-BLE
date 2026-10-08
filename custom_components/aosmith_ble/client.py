@@ -18,6 +18,7 @@ from .const import (
     ENERGY_PREFERENCES,
     FAULT,
     HOT_WATER_PLUS,
+    INSPECT_REGISTERS,
     MAX_TEMP_F,
     MIN_TEMP_F,
     MODE,
@@ -345,6 +346,56 @@ class HeaterClient:
                     raise
         raise ProtocolError("No state received")
 
+    async def inspect_dr_status(self):
+        """Read the APK's 26-word status block plus known context; never write registers.
+
+        Block 27's unnamed offsets are candidates, not identified DR states.
+        Timestamp every row because a snapshot is a sequence, not an atomic read.
+        """
+        names = {reg: name for name, reg in INSPECT_REGISTERS.items() if reg != (28, 113)}
+        registers = dict.fromkeys([(27, i) for i in range(26)] + list(names))
+        result = {
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "complete": False,
+            "active_dr_level": None,
+            "registers": {
+                f"{block}:{parameter}": {
+                    "block": block,
+                    "parameter": parameter,
+                    "name": names.get((block, parameter), "unmapped_status"),
+                    "raw": None,
+                    "hex": None,
+                    "read_at": None,
+                    "error": "Not read",
+                }
+                for block, parameter in registers
+            },
+        }
+        async with self._lock:
+            try:
+                await self._ensure_session()
+                for block, parameter in registers:
+                    row = result["registers"][f"{block}:{parameter}"]
+                    try:
+                        value = await self._read((block, parameter))
+                        row.update(raw=value, hex=f"{value:04X}", error=None)
+                    except StatusError as err:
+                        row["error"] = str(err)
+                        if err.code not in (1, 0x40):
+                            raise
+                    finally:
+                        row["read_at"] = datetime.now(timezone.utc).isoformat()
+                result["complete"] = all(row["raw"] is not None for row in result["registers"].values())
+            except (BleakError, TimeoutError, ProtocolError) as err:
+                result["error"] = type(err).__name__
+                await self._close()
+            except BaseException:
+                await self._close()
+                raise
+            finally:
+                result["time"] = datetime.now(timezone.utc).isoformat()
+        return result
+
     async def _write_words_confirmed(self, register, words, *, record=None):
         """One write followed by fresh readback; a missing ACK never triggers another write."""
         words = tuple(words)
@@ -483,7 +534,7 @@ class HeaterClient:
                 await self._close()
                 raise
 
-    async def apply_schedule(self, schedule, save_original, *, local_now=None, restoring=False):
+    async def apply_schedule(self, schedule, save_original, *, restoring=False):
         validate_payloads(schedule)
         async with self._lock:
             operation = {
@@ -509,10 +560,6 @@ class HeaterClient:
                     )
                 operation["phase"] = "saving_original"
                 await save_original(original)
-                if local_now is not None:
-                    operation["phase"] = "setting_clock"
-                    LOGGER.info("Tariff upload: setting the heater clock")
-                    await self._set_clock(local_now)
                 operation["outcome"] = "partial_or_unconfirmed"
                 operation["phase"] = "writing_holidays"
                 LOGGER.info("Tariff upload: writing holiday and preference data")

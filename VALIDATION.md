@@ -1,8 +1,8 @@
-# Version 2.1.1 validation
+# Version 2.2.0 validation
 
-Reviewed October 5, 2026. Automated checks use Python 3.13.15 and Home Assistant
+Reviewed October 7, 2026. Automated checks use Python 3.13.15 and Home Assistant
 2025.12.5, the supported minimum series. The owner's installation runs HA 2026.9.4.
-**248 tests pass locally**, plus Ruff lint/format and release archive validation.
+**225 tests pass locally**, plus Ruff lint/format and release archive validation.
 The GitHub Tests workflow gates publication of the versioned release.
 
 ## Software coverage
@@ -63,27 +63,22 @@ Additional models, active proxies, Hot Water Plus effects, pairing-slot limits,
 long idle/recovery and energy-counter resets require further physical testing.
 Storage/readback success does not establish these effects.
 
-Startup and normal polling now include bounded automatic clock maintenance.
-Clock reads occur at startup/recovery and the first normal poll at/after local :02
-each hour, with early checks for
-new clock faults or timezone/offset changes. Tests cover the two-minute tolerance,
-zero-minute/hour-boundary handling, daily refresh, timezone changes, both DST
-transitions and UTC-based cooldown calculations. Failed attempts remain throttled
-across restart and cancellation; storage verification precedes automatic transmission.
-Read/storage errors leave the coordinator's valid heater snapshot usable. Clock
-maintenance is skipped while a tariff operation is active. Hourly scheduling tests
-cover startup before/after :02, delayed polls, the repeated fall hour, the spring
-skip, a half-hour DST transition and backwards host-clock correction.
+Version 2.2.0 removes automatic clock maintenance and the tariff upload's clock
+write. Regression tests require no clock reads/writes from startup, fault handling,
+recovery or normal polling, no block-26 writes during tariff upload, and exactly
+one explicit manual clock write with durable operation history. Migration restores
+only manual clock buttons disabled by the integration, preserving user choices.
 
-Manual and tariff clock writes update the same history. A clock-history storage
-failure does not discard the tariff's independently saved completion record.
-The manual button is disabled by default via a one-time migration; existing
-inspection controls remain enabled where the owner opted in. Diagnostic entity
-removal is pending completion of hardware testing. Standard diagnostics remain.
+DR tests exercise the full block-27 read allowlist, per-register timestamps,
+unsupported-word continuation, transport failure with partial capture retention,
+no register writes or enrollment, bounded history/diffs, session deadlines,
+repeated-start rejection, cancellation, interrupted restart, and targeted actions.
+The fake peripheral validates transport and lifecycle logic; the new unknown
+status words still need physical captures to identify an active DR mapping.
 
-The independent 22:02 EDT clock capture must run on version 2.0.0 before enabling
-this automatic correction, to avoid masking autonomous rollover. New Python code
-requires a Core restart; normal options and tariff changes do not.
+New Python code requires a Core restart; normal options and tariff changes do not.
+The read-only monitor is opt-in, stops at its deadline/unload/restart, and does not
+resume itself. Captures are deliberately labeled raw rather than live DR levels.
 
 The reported HAOS shutdown screenshot shows services stopping and Supervisor
 waiting, not its initiating cause. No host shutdown was reproduced or invoked by

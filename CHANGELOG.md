@@ -1,3 +1,16 @@
+# 2.2.0
+
+- Remove every automatic clock-setting path, including tariff uploads. Retain an
+  explicit manual button and persisted acknowledgement/readback history.
+- Add read-only DR status snapshots: every block-27 status word and known context,
+  per-register timestamps, partial failures and differences between captures.
+- Add opt-in three-hour monitoring, configurable 1–360 minutes via an action,
+  one-minute sampling, stop control, persistent last-400 history and a status sensor.
+  Monitoring never resumes after a restart. No active DR decoding is claimed.
+- Bundle existing AO Smith light/dark icon/logo PNGs and include them in releases.
+  Add the logo to the README/HACS detail page; the HACS list icon remains dependent
+  on upstream bundled-brand support.
+
 # 2.1.1 — October 5, 2026
 
 - Reduce scheduled clock reads to hourly, aligned to local minute 2. The first

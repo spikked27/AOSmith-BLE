@@ -15,7 +15,11 @@ output = root / "dist" / "aosmith_ble.zip"
 output.parent.mkdir(exist_ok=True)
 with ZipFile(output, "w", ZIP_DEFLATED) as archive:
     for path in sorted(component.rglob("*")):
-        if path.is_file() and path.suffix in {".py", ".json", ".yaml"} and "__pycache__" not in path.parts:
+        if (
+            path.is_file()
+            and path.suffix in {".py", ".json", ".yaml", ".png"}
+            and "__pycache__" not in path.parts
+        ):
             archive.write(path, path.relative_to(root))
 with ZipFile(output) as archive:
     assert archive.testzip() is None

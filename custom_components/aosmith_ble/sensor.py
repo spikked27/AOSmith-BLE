@@ -17,6 +17,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             EnergySensor(coordinator),
             TariffSensor(coordinator),
             DiagnosticReadStatus(coordinator),
+            DRMonitorStatus(coordinator),
             IntegrationVersion(coordinator),
         ]
     )
@@ -42,6 +43,29 @@ class DiagnosticReadStatus(HeaterEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         return dict(self.coordinator.diagnostic_status)
+
+
+class DRMonitorStatus(HeaterEntity, SensorEntity):
+    _attr_name = "DR monitoring status"
+    _attr_icon = "mdi:clipboard-pulse-outline"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator):
+        super().__init__(coordinator, "dr_monitor_status")
+
+    @property
+    def available(self):
+        return True
+
+    @property
+    def native_value(self):
+        return self.coordinator.dr.data["status"]
+
+    @property
+    def extra_state_attributes(self):
+        # Keep large raw capture arrays out of HA's state machine and recorder.
+        return {key: value for key, value in self.coordinator.dr.data.items() if key != "captures"}
 
 
 class IntegrationVersion(HeaterEntity, SensorEntity):

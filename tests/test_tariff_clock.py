@@ -270,9 +270,10 @@ async def test_full_upload_backs_up_before_writes_and_includes_all_twenty_slots(
         assert not writes(peripheral)
         saved.append(deepcopy(value))
 
-    result = await client.apply_schedule(schedule, backup, local_now=lambda: LOCAL)
+    result = await client.apply_schedule(schedule, backup)
     assert result["outcome"] == "readback_confirmed" and result["confirmed_chunks"] == 60
-    assert len(writes(peripheral)) == 61  # Clock + 5 extra-data + 55 season writes.
+    assert len(writes(peripheral)) == 60  # Five extra-data + 55 season writes.
+    assert not any(packet[3] == 26 for packet in writes(peripheral))
     for block in schedule["seasons"]:
         assert [peripheral.registers[(block["block"], i)] for i in range(62)] == season_words(block)
         assert any(p[3:5] == bytes((block["block"], 56)) for p in writes(peripheral))
@@ -290,9 +291,7 @@ async def test_full_upload_backs_up_before_writes_and_includes_all_twenty_slots(
 async def test_backup_failure_prevents_clock_and_schedule_writes():
     client, peripheral = make_pair()
     with pytest.raises(OSError):
-        await client.apply_schedule(
-            build_schedule(PLAN, "More Hot Water"), AsyncMock(side_effect=OSError()), local_now=lambda: LOCAL
-        )
+        await client.apply_schedule(build_schedule(PLAN, "More Hot Water"), AsyncMock(side_effect=OSError()))
     assert not writes(peripheral)
 
 
@@ -398,7 +397,7 @@ async def test_options_open_tariff_directly_without_experimental_parameters(tmp_
         form = await flow.async_step_tariff_confirm()
         assert {str(key) for key in form["data_schema"].schema} == {"preference"}
         assert form["description_placeholders"]["utility"] == "PSEG Long Island"
-        assert flow._sync_clock
+        assert not hasattr(flow, "_sync_clock")
     await hass.async_stop()
 
 
@@ -473,7 +472,7 @@ async def test_ha_shutdown_cancels_partial_upload_and_preserves_backup(tmp_path)
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, stop)
         task = test_entry.async_create_background_task(
             hass,
-            coordinator.async_apply_tariff(PLAN, "More Savings", sync_clock=False),
+            coordinator.async_apply_tariff(PLAN, "More Savings"),
             "test_upload",
         )
         try:
@@ -510,9 +509,9 @@ async def test_tariff_backup_survives_restart_and_is_not_replaced(tmp_path):
     with patch("custom_components.aosmith_ble.coordinator.make_client", return_value=client):
         first = HeaterCoordinator(hass, test_entry)
         first.async_request_refresh = AsyncMock()
-        await first.async_apply_tariff(PLAN, "Most Savings", sync_clock=False)
+        await first.async_apply_tariff(PLAN, "Most Savings")
         original = deepcopy(first.tariff_state["original"])
-        await first.async_apply_tariff(PLAN, "More Hot Water", sync_clock=False)
+        await first.async_apply_tariff(PLAN, "More Hot Water")
         assert first.tariff_state["original"] == original
         second = HeaterCoordinator(hass, test_entry)
         second.async_request_refresh = AsyncMock()
@@ -617,7 +616,7 @@ async def test_public_preference_persists_complete_schedule_across_restart(tmp_p
         first.async_request_refresh = AsyncMock()
         with pytest.raises(HomeAssistantError, match="Configure"):
             await first.async_set_energy_preference("More Savings")
-        await first.async_apply_tariff(plan, "More Hot Water", sync_clock=False)
+        await first.async_apply_tariff(plan, "More Hot Water")
         initial = deepcopy(first.tariff_state["original"])
         previous = len(writes(peripheral))
         await first.async_set_energy_preference("More Savings")
@@ -649,7 +648,7 @@ async def test_failed_preference_keeps_last_confirmed_plan_and_reports_incomplet
     with patch("custom_components.aosmith_ble.coordinator.make_client", return_value=client):
         coordinator = HeaterCoordinator(hass, entry())
         coordinator.async_request_refresh = AsyncMock()
-        await coordinator.async_apply_tariff(plan, "More Hot Water", sync_clock=False)
+        await coordinator.async_apply_tariff(plan, "More Hot Water")
         saved = coordinator.tariff_state["applied_at"]
         write = peripheral.write_gatt_char
 

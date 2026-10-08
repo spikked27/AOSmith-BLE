@@ -58,6 +58,7 @@ async def async_setup_entry(hass, entry):
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
     async def stop(_event):
+        await coordinator.dr.async_stop()
         await coordinator.client.disconnect()
 
     async def reload_entry(hass, entry):
@@ -77,6 +78,7 @@ async def async_setup_entry(hass, entry):
 async def async_unload_entry(hass, entry):
     if unloaded := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         coordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        await coordinator.dr.async_stop()
         await coordinator.client.disconnect()
     return unloaded
 
@@ -114,17 +116,15 @@ async def async_migrate_entry(hass, entry):
                 registry.async_update_entity(
                     entity.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
                 )
-    if entry.minor_version < 4:
+    if entry.minor_version < 5:
         registry = er.async_get(hass)
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
             if (
                 entity.platform == DOMAIN
                 and entity.domain == "button"
                 and entity.unique_id.endswith("_set_clock")
-                and entity.disabled_by is None
+                and entity.disabled_by == er.RegistryEntryDisabler.INTEGRATION
             ):
-                registry.async_update_entity(
-                    entity.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
-                )
-        hass.config_entries.async_update_entry(entry, minor_version=4, options=clean_options(entry.options))
+                registry.async_update_entity(entity.entity_id, disabled_by=None)
+        hass.config_entries.async_update_entry(entry, minor_version=5, options=clean_options(entry.options))
     return True

@@ -18,9 +18,10 @@ async def async_get_config_entry_diagnostics(hass, entry):
         "home_assistant_version": ha_version,
         "protocol_profile": "next_gen_heat_pump",
         "options": clean_options(entry.options),
-        "clock_maintenance": getattr(getattr(coordinator, "clock", None), "state", None),
+        "clock_history": getattr(getattr(coordinator, "clock", None), "state", None),
+        "dr_diagnostics": getattr(getattr(coordinator, "dr", None), "data", None),
         "host_clock": {"utc": dt_util.utcnow().isoformat(), "time_zone": hass.config.time_zone},
-        "clock_sync": "Automatic local-time maintenance at 26:3–4; see clock_maintenance and clock_operation for full/partial readback; RTC ticking and firmware DST behavior are not verified",
+        "clock_sync": "Manual only. No startup, periodic, reconnect, or tariff clock writes. Readback may retain last written hour; RTC ticking is unverified",
         "heater_error": fault_details(coordinator.data.fault)
         if coordinator and coordinator.data and coordinator.last_update_success
         else None,
