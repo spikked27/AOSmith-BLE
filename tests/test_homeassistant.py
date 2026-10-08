@@ -239,7 +239,7 @@ async def test_temperature_ceiling_is_stable_with_missing_or_mirroring_data(coor
 async def test_core_energy_read_is_always_enabled(tmp_path):
     from unittest.mock import Mock
 
-    from custom_components.aosmith_ble.const import ENERGY
+    from custom_components.aosmith_ble.const import CLOCK_STATUS_REGISTERS, ENERGY
     from custom_components.aosmith_ble.coordinator import HeaterCoordinator
 
     hass = HomeAssistant(str(tmp_path))
@@ -254,6 +254,7 @@ async def test_core_energy_read_is_always_enabled(tmp_path):
     with patch("custom_components.aosmith_ble.coordinator.make_client", return_value=client):
         HeaterCoordinator(hass, entry)
     assert client.optional_registers == {
+        **CLOCK_STATUS_REGISTERS,
         "energy_wh": ENERGY,
         "hot_water_plus": (11, 20),
         "energy_preference_experimental": (28, 75),
@@ -330,7 +331,7 @@ async def test_hot_water_plus_is_detected_without_options(tmp_path, coordinator)
     await select.async_setup_entry(hass, entry, entities.extend)
     assert len(entities) == 3
     assert entities[-1].name == "Hot Water Plus"
-    assert "switch" not in PLATFORMS and set(FLAGS) == {"fault_present"}
+    assert "switch" in PLATFORMS and set(FLAGS) == {"fault_present"}
     await hass.async_stop()
 
 
@@ -411,22 +412,6 @@ def test_obsolete_availability_options_do_not_change_default_mapping(coordinator
     assert sensor.extra_state_attributes["raw_value"] == 5
     assert sensor.unique_id == coordinator.address + "_availability"
     assert sensor.state_class is None
-
-
-async def test_reconnect_button_is_usable_when_heater_is_unavailable(coordinator):
-    import asyncio
-
-    from custom_components.aosmith_ble.button import DebugButton
-
-    coordinator.last_update_success = False
-    coordinator.command_lock = asyncio.Lock()
-    coordinator.client = SimpleNamespace(disconnect=AsyncMock())
-    coordinator.async_request_refresh = AsyncMock()
-    button = DebugButton(coordinator, "reconnect")
-    assert button.available
-    await button.async_press()
-    coordinator.client.disconnect.assert_awaited_once()
-    coordinator.async_request_refresh.assert_awaited_once()
 
 
 async def test_vacation_hides_temperature_editor_and_rejects_temperature_writes(coordinator):
@@ -602,7 +587,24 @@ async def test_upgrade_removes_tariff_cache_and_retires_duplicate_entities(tmp_p
         SimpleNamespace(
             platform=DOMAIN, unique_id="address_" + key, entity_id="sensor." + key, disabled_by=None
         )
-        for key in ("tariff", "fault", "mode_duration", "target_temperature", "fault_present", "availability")
+        for key in (
+            "tariff",
+            "fault",
+            "mode_duration",
+            "target_temperature",
+            "inspect",
+            "inspect_schedule",
+            "inspect_dr",
+            "start_dr_monitor",
+            "stop_dr_monitor",
+            "refresh",
+            "reconnect",
+            "integration_version",
+            "diagnostic_read_status",
+            "dr_monitor_status",
+            "fault_present",
+            "availability",
+        )
     ]
     config_entries = SimpleNamespace(async_forward_entry_setups=AsyncMock(), async_update_entry=MagicMock())
     coordinator = SimpleNamespace(
@@ -623,6 +625,21 @@ async def test_upgrade_removes_tariff_cache_and_retires_duplicate_entities(tmp_p
         call("sensor.fault"),
         call("sensor.mode_duration"),
         call("sensor.target_temperature"),
+        *[
+            call("sensor." + key)
+            for key in (
+                "inspect",
+                "inspect_schedule",
+                "inspect_dr",
+                "start_dr_monitor",
+                "stop_dr_monitor",
+                "refresh",
+                "reconnect",
+                "integration_version",
+                "diagnostic_read_status",
+                "dr_monitor_status",
+            )
+        ],
     ]
     await hass.async_stop()
 
@@ -677,28 +694,21 @@ def test_hps10_category_sensor_preserves_identity_and_uncertainty(coordinator, r
     assert sensor.state_class is None
 
 
-async def test_release_entities_are_minimal_with_opt_in_debug(tmp_path, coordinator):
-    from custom_components.aosmith_ble import binary_sensor, button, select, sensor, water_heater
+async def test_public_release_has_no_diagnostic_entities(tmp_path, coordinator):
+    from custom_components.aosmith_ble import binary_sensor, button, select, sensor, switch, water_heater
 
     hass = HomeAssistant(str(tmp_path))
     hass.data[DOMAIN] = {"test": coordinator}
     entry = SimpleNamespace(entry_id="test", options={})
     entities = []
-    for platform in (binary_sensor, button, select, sensor, water_heater):
+    for platform in (binary_sensor, button, select, sensor, switch, water_heater):
         await platform.async_setup_entry(hass, entry, entities.extend)
     normal = [e for e in entities if e.entity_registry_enabled_default]
-    debug = [e for e in entities if not e.entity_registry_enabled_default]
-    assert len(normal) == 8 and len(debug) == 10
-    assert sum(e.entity_category is None for e in normal) == 7
-    assert {e.action for e in debug if isinstance(e, button.DebugButton)} == {
-        "refresh",
-        "reconnect",
-        "inspect",
-        "inspect_schedule",
-        "inspect_dr",
-        "start_dr_monitor",
-        "stop_dr_monitor",
-    }
+    legacy = [e for e in entities if not e.entity_registry_enabled_default]
+    assert len(normal) == 11
+    assert len(legacy) == 1 and legacy[0].unique_id.endswith("_availability")
+    assert not any(e.entity_category == "diagnostic" for e in entities)
+    assert [e.name for e in entities if isinstance(e, button.ButtonEntity)] == ["Synchronize clock"]
     assert not any("Restore" in (e.name or "") or "experimental" in (e.name or "") for e in entities)
     await hass.async_stop()
 
@@ -743,9 +753,9 @@ async def test_debug_default_migration_runs_once_and_preserves_pairing(tmp_path)
             "button.refresh", disabled_by=er.RegistryEntryDisabler.INTEGRATION
         )
         config_entries.async_update_entry.assert_called_once_with(
-            entry, minor_version=5, options=clean_options({})
+            entry, minor_version=6, options=clean_options({})
         )
-        entry.minor_version = 5  # User can now re-enable the button permanently.
+        entry.minor_version = 6  # Migration does not repeat.
         registry.reset_mock()
         assert await async_migrate_entry(hass, entry)
         registry.async_update_entity.assert_not_called()
@@ -868,7 +878,52 @@ async def test_v2_migration_preserves_enabled_inspection_and_tariff(tmp_path):
         "sensor.diagnostic_read_status",
     }
     saved = config_entries.async_update_entry.call_args.kwargs
-    assert saved["minor_version"] == 5
+    assert saved["minor_version"] == 6
     assert saved["options"]["tariff"] == options["tariff"]
     assert saved["options"]["tariff_preference"] == "More Savings"
+    await hass.async_stop()
+
+
+@pytest.mark.parametrize("raw,category", [(0, "Low"), (5, "Medium"), (10, "High"), (65535, None)])
+def test_hot_water_category_preserves_raw_report_and_old_index(coordinator, raw, category):
+    from custom_components.aosmith_ble.sensor import HotWaterLevel
+
+    coordinator.data = HeaterState(
+        125, 4, raw, 0, availability_word=raw, availability_read_at="2026-10-08T02:05:00+00:00"
+    )
+    sensor = HotWaterLevel(coordinator)
+    assert sensor.native_value == category
+    assert sensor.native_unit_of_measurement is None
+    assert sensor.extra_state_attributes["raw_word"] == raw
+    assert sensor.extra_state_attributes["last_read_at"] == coordinator.data.availability_read_at
+    old = HeaterSensor(coordinator, "availability")
+    assert old.unique_id == coordinator.address + "_availability"
+    assert not old.entity_registry_enabled_default
+    assert sensor.entity_registry_enabled_default
+
+
+async def test_automatic_clock_switch_preserves_options_and_supports_disabling(tmp_path):
+    from test_tariff_clock import entry
+
+    from custom_components.aosmith_ble.const import CONF_AUTO_CLOCK
+    from custom_components.aosmith_ble.coordinator import HeaterCoordinator
+    from custom_components.aosmith_ble.switch import AutomaticClockCorrection
+
+    hass = HomeAssistant(str(tmp_path))
+    test_entry = entry()
+    with patch(
+        "custom_components.aosmith_ble.coordinator.make_client",
+        return_value=SimpleNamespace(optional_registers={}),
+    ):
+        coordinator = HeaterCoordinator(hass, test_entry)
+    switch = AutomaticClockCorrection(coordinator)
+    update = MagicMock()
+    with patch.object(hass, "config_entries", SimpleNamespace(async_update_entry=update)):
+        assert switch.is_on
+        await switch.async_turn_off()
+        assert not switch.is_on
+        assert update.call_args.kwargs["options"][CONF_AUTO_CLOCK] is False
+        await switch.async_turn_on()
+        assert switch.is_on
+    assert clean_options({CONF_AUTO_CLOCK: False})[CONF_AUTO_CLOCK] is False
     await hass.async_stop()

@@ -27,9 +27,9 @@ async def test_capture_reads_complete_allowlist_with_timestamps_and_never_writes
     try:
         result = await client.inspect_dr_status()
         assert result["complete"]
-        assert result["active_dr_level"] is None
+        assert result["active_dr_level"] == "Baseline"
         assert {f"27:{i}" for i in range(26)} <= result["registers"].keys()
-        assert result["registers"]["27:0"]["name"] == "unmapped_status"
+        assert result["registers"]["27:0"]["name"] == "dr_status"
         assert "28:113" not in result["registers"]
         assert all(row["read_at"] and row["error"] is None for row in result["registers"].values())
         assert not writes(peripheral)
@@ -98,7 +98,7 @@ async def test_persistent_history_compares_changes_and_bounds_memory(setup_dr):
     first = await coordinator.dr.async_capture()
     peripheral.registers[(27, 0)] = 7
     second = await coordinator.dr.async_capture()
-    assert second["changes_since_previous"]["27:0"] == {"before": 0, "after": 7, "name": "unmapped_status"}
+    assert second["changes_since_previous"]["27:0"] == {"before": 0, "after": 7, "name": "dr_status"}
     assert second["compared_to"] == first["started_at"]
     del peripheral.registers[(27, 0)]
     third = await coordinator.dr.async_capture()

@@ -19,9 +19,10 @@ async def async_get_config_entry_diagnostics(hass, entry):
         "protocol_profile": "next_gen_heat_pump",
         "options": clean_options(entry.options),
         "clock_history": getattr(getattr(coordinator, "clock", None), "state", None),
+        "clock_verification": getattr(getattr(coordinator, "clock_guard", None), "data", None),
         "dr_diagnostics": getattr(getattr(coordinator, "dr", None), "data", None),
         "host_clock": {"utc": dt_util.utcnow().isoformat(), "time_zone": hass.config.time_zone},
-        "clock_sync": "Manual only. No startup, periodic, reconnect, or tariff clock writes. Readback may retain last written hour; RTC ticking is unverified",
+        "clock_sync": "Live DR transitions verify tariff timing within a 180-second tolerance. A missed transition can trigger one bounded clock correction after schedule readback. 26:3–4 is not treated as a ticking RTC.",
         "heater_error": fault_details(coordinator.data.fault)
         if coordinator and coordinator.data and coordinator.last_update_success
         else None,

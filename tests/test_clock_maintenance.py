@@ -1,4 +1,4 @@
-"""Regression coverage for manual-only clock control and migration from 2.1.x."""
+"""Regression coverage for write-free startup and manual clock controls."""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -54,7 +54,7 @@ async def test_tariff_never_sets_clock_but_manual_button_does_and_persists(tmp_p
             assert len([packet for packet in writes(peripheral) if packet[3] == 26]) == 1
             history = await coordinator.clock.store.async_load()
             assert history["last_reason"] == "manual"
-            assert history["automatic_setting_enabled"] is False
+            assert "automatic_setting_enabled" not in history
             assert history["last_operation"]["rtc_running_verified"] is False
     finally:
         await client.disconnect()

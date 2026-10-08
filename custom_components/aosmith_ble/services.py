@@ -42,10 +42,20 @@ def async_register_services(hass):
             await coordinator.async_capture_dr_status()
         elif call.service == "start_dr_monitor":
             await coordinator.dr.async_start(call.data["duration_minutes"])
+        elif call.service == "inspect_registers":
+            await coordinator.async_inspect_registers()
+        elif call.service == "inspect_schedule":
+            await coordinator.async_inspect_schedule()
         else:
             await coordinator.dr.async_stop()
 
-    for name in ("capture_dr_status", "start_dr_monitor", "stop_dr_monitor"):
+    for name in (
+        "capture_dr_status",
+        "start_dr_monitor",
+        "stop_dr_monitor",
+        "inspect_registers",
+        "inspect_schedule",
+    ):
         fields = {vol.Required("config_entry_id"): cv.string}
         if name == "start_dr_monitor":
             fields[vol.Optional("duration_minutes", default=180)] = vol.All(

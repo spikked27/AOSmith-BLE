@@ -1,8 +1,8 @@
-# Version 2.2.0 validation
+# Version 3.0.0 validation
 
 Reviewed October 7, 2026. Automated checks use Python 3.13.15 and Home Assistant
 2025.12.5, the supported minimum series. The owner's installation runs HA 2026.9.4.
-**225 tests pass locally**, plus Ruff lint/format and release archive validation.
+**281 tests pass locally**, plus Ruff lint/format and release archive validation.
 The GitHub Tests workflow gates publication of the versioned release.
 
 ## Software coverage
@@ -11,8 +11,8 @@ The GitHub Tests workflow gates publication of the versioned release.
   read recovery, unsupported-register handling and no automatic write replay.
 - Temperature bounds, modes, Electric/Vacation/Guest durations, countdown readback,
   mode-change guards, availability categories, faults and cumulative energy.
-- Public entity defaults, automatic Hot Water Plus detection, simplified tariff
-  setup, no restore entities, stable existing IDs and one-time upgrade migration.
+- Public entity defaults, removal of diagnostic entities, automatic Hot Water Plus
+  detection, stable normal-control IDs, legacy availability compatibility and migration.
 - Durable original backups, full five-season/holiday/preference uploads, 60 fresh
   readback confirmations, all twenty event slots and stopping after write errors.
 - All three preference schedules compared with independently recovered fixtures.
@@ -52,33 +52,66 @@ The 20:51 EDT clock trial sent `3314 3545` and received a valid positive ACK;
 readback returned `0014 3545`. The later 21:00 trial wrote and read `0015 3545`.
 Version 2 accepts the first observed shape as acknowledged date/hour readback,
 while retaining `minute_verified: false` and `rtc_running_verified: false`.
-The later write is not evidence of autonomous hour rollover. The independent
-clock check remains separate from the release.
+The later write is not evidence of autonomous hour rollover. Version 3 verifies
+timing independently through DR transitions; it never compares those clock fields
+to host time to infer drift.
+
+## October 7 DR capture and replay
+
+The owner's v2.2.0 capture contains 75 complete snapshots between approximately
+20:51 and 22:05 EDT, without register-read errors. Register 27:0 stayed `0600`
+through 21:59:59.421, then was `0000` at 22:00:59.365. The applied Rate 195 / More
+Savings schedule changes DR1 to Baseline at 22:00. This supports the high-byte DR
+mapping and a working tariff transition despite 26:3–4 retaining the earlier
+written hour. DR2/DR3/Load up mappings follow the app's schedule event codes and
+need equivalent live captures.
+
+The redacted fixture in `tests/fixtures/dr_transition_20261007.json` includes the
+75 DR timestamps/values, availability codes and schedule bytes only. The replay
+observes an on-time transition and issues no clock writes. Version 2.2 did not
+capture historical mode in each row; replay supplies Hybrid from the final state,
+so continuous Hybrid operation remains an assumption. Version 3 captures mode,
+setpoint and fault in future diagnostic snapshots.
+
+Availability register 27:23 returned raw zero throughout that observation window.
+This establishes a heater-reported value, not a stuck HA percentage conversion.
+Raw zero is the Low category; it does not establish zero usable gallons. A stuck
+heater estimate versus a genuinely low level needs comparison with iCOMM and
+actual hot-water delivery. No measured tank temperature is exposed.
+
+## Clock verification tests
+
+Automated tests cover value-changing boundaries, weekday/weekend schedules,
+overnight carry, season/year wrap, holiday/observed-date pauses, DST pauses and
+unknown DR codes. Simulated misses require pre-boundary evidence, three minutes
+of grace and three fresh mismatches spanning at least one minute.
+
+Correction tests verify complete matching schedule bytes, a fresh pre-write status
+check, no write after an override/timezone/deadline change, durable limits before
+transmission, no repeat after restart/failure/cancellation, a 24-hour cap even after
+resolution, and a later on-time transition before clearing the active desync.
+One test exercises the actual clock wire writer against a simulated peripheral.
+Malformed tariffs leave core readings available. Unsupported/missing reads and
+Electric/Vacation/Guest/Heat pump modes cannot trigger correction. Legacy applied
+plans are reconstructed separately from an unconfirmed upload candidate.
+
+Startup, ordinary recovery and tariff application remain write-free by themselves.
+The clock switch and explicit manual button are tested. A desync label represents
+missed schedule execution; the tests do not prove a physical clock fault.
 
 ## Remaining physical validation
 
-Clock ticking, DST, schedule activation/heating effects, countdown expiry and
-power-loss persistence are not yet demonstrated by the supplied captures.
-Additional models, active proxies, Hot Water Plus effects, pairing-slot limits,
-long idle/recovery and energy-counter resets require further physical testing.
-Storage/readback success does not establish these effects.
+Automatic repair effectiveness, long-term clock accuracy, DST recovery, tariff
+heating effects, timed-mode expiry and power-loss persistence need further live
+validation. Other models, active proxies, Hot Water Plus effects, pairing-slot
+limits and energy-counter resets are also unverified. A release passing automated
+tests does not establish those physical behaviors.
 
-Version 2.2.0 removes automatic clock maintenance and the tariff upload's clock
-write. Regression tests require no clock reads/writes from startup, fault handling,
-recovery or normal polling, no block-26 writes during tariff upload, and exactly
-one explicit manual clock write with durable operation history. Migration restores
-only manual clock buttons disabled by the integration, preserving user choices.
-
-DR tests exercise the full block-27 read allowlist, per-register timestamps,
-unsupported-word continuation, transport failure with partial capture retention,
-no register writes or enrollment, bounded history/diffs, session deadlines,
-repeated-start rejection, cancellation, interrupted restart, and targeted actions.
-The fake peripheral validates transport and lifecycle logic; the new unknown
-status words still need physical captures to identify an active DR mapping.
-
-New Python code requires a Core restart; normal options and tariff changes do not.
-The read-only monitor is opt-in, stops at its deadline/unload/restart, and does not
-resume itself. Captures are deliberately labeled raw rather than live DR levels.
+DR tests cover the fixed read allowlist, timestamps, unsupported-word continuation,
+partial captures, no writes/enrollment from diagnostic actions, bounded history,
+session deadlines, cancellation/restart and targeting. New code requires a Core
+restart; pairing and stored tariffs are preserved. Diagnostic entities are removed
+on upgrade while their evidence and corresponding read-only actions remain.
 
 The reported HAOS shutdown screenshot shows services stopping and Supervisor
 waiting, not its initiating cause. No host shutdown was reproduced or invoked by

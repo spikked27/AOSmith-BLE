@@ -1,4 +1,4 @@
-"""History for explicit manual clock writes; no automatic clock maintenance."""
+"""Durable clock write history; acceptance is separate from timing verification."""
 
 import logging
 
@@ -14,14 +14,14 @@ class ClockHistory:
     def __init__(self, hass, entry, client, local_now):
         self.local_now = local_now
         self.store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.clock")
-        self.state = {"automatic_setting_enabled": False}
+        self.state = {}
         self.loaded = False
 
     async def async_load(self):
         if not self.loaded:
             saved = await self.store.async_load()
             self.state = saved if isinstance(saved, dict) else {}
-            self.state["automatic_setting_enabled"] = False
+            self.state.pop("automatic_setting_enabled", None)
             self.state.pop("next_check_at", None)
             self.state.pop("pending_reason", None)
             self.loaded = True

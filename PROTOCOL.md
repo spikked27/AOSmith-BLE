@@ -284,3 +284,45 @@ Optional reads continue after status 1 or 0x40; transport/corrupt-response failu
 still stop the scan. A completion status and notification distinguish finished,
 rejected, incomplete and failed reads. The complete schedule reader captures all
 five seasons and 28:50–78 independently of the shorter extended-register scan.
+
+
+## Live DR observation and transition verification (3.0.0)
+
+On October 7, 2026, 75 complete owner snapshots (about 20:51–22:05 EDT) showed:
+
+| Register | Observation | Interpretation / confidence |
+|---|---|---|
+| 27:0 | `0600` through 21:59:59.421; `0000` at 22:00:59.365 | Upper byte matches scheduled DR1 (6) → Baseline (0) at 22:00 |
+| 27:2 | 11 → 12 around that boundary | Consistent with flattened event index; still provisional, not exposed |
+| 27:6 | 0 → 356 around 22:02 | Candidate instantaneous W; later energy deltas support it, not yet exposed |
+| 27:7–9 | Low word rises by about 6 Wh/minute | Consistent with roughly 360 W after the boundary |
+| 27:23 | Raw 0 throughout the observation | Heater-reported Low category, not a measured 0% of tank volume |
+| 26:3–4 | `000F 3547` stays fixed | Last-written-hour readback cannot diagnose drift |
+
+Status decoding accepts only zero low-byte data and known upper-byte codes:
+0 Baseline, 6 DR1, 7 DR2, 8 DR3, 9 Load up. Only the 6 → 0 transition is physically
+observed here; the other labels derive from the app's schedule encoding. This is
+not a compressor/element activity signal. Snapshot words have individual read
+timestamps and must not be treated as simultaneous.
+
+ClockGuard compares these live readings to **confirmed** tariff bytes in HA local
+time. It ignores price boundaries with unchanged DR code, requires two matching
+pre-boundary observations, waits 180 seconds, then requires three mismatches over
+at least 60 seconds. Gaps over 90 seconds and mode/setpoint/timezone changes reset
+observations. Holiday/following dates, DST-change dates and season-start dates
+pause checks. Hybrid mode, no hardware fault (except the known power-loss code 42),
+and clear 27:3, 27:25, 28:109 and 28:13 status are required. A fresh preference
+word must match the confirmed tariff.
+
+Before a correction it compares all five 124-byte blocks and 29 extra words from
+the heater, then rereads live conditions. The attempt limit is saved and reread
+from disk before the single clock write. One attempt is allowed per unresolved
+episode and per 24 hours. Acknowledgement confirms acceptance, not clock timing;
+a later on-time value-changing transition clears the active desync while retaining
+its timestamps/count. A missed boundary can also indicate a schedule-execution
+problem, so a failed repair is never repeatedly replayed.
+
+Legacy numeric availability remains 0/50/100 for compatibility; the primary public
+entity now presents Low/Medium/High. Fresh read timestamps and full raw words are
+retained. The integration cannot infer tank volume or that a repeated raw zero is
+itself defective.

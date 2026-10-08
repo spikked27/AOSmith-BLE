@@ -17,7 +17,10 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .client import HeaterClient
 from .clock import ClockHistory
+from .clock_guard import ClockGuard
 from .const import (
+    CLOCK_STATUS_REGISTERS,
+    CONF_AUTO_CLOCK,
     CONF_ENERGY_PREFERENCE,
     CONF_IDENTIFIER,
     CONF_INTERVAL,
@@ -93,9 +96,11 @@ class HeaterCoordinator(DataUpdateCoordinator):
         self.client.optional_registers["energy_wh"] = ENERGY
         self.client.optional_registers["hot_water_plus"] = HOT_WATER_PLUS
         self.client.optional_registers["energy_preference_experimental"] = ENERGY_PREFERENCE
+        self.client.optional_registers.update(CLOCK_STATUS_REGISTERS)
         self.address = entry.data[CONF_ADDRESS]
         self.command_lock = asyncio.Lock()
         self.clock = ClockHistory(hass, entry, self.client, self.local_now)
+        self.clock_guard = ClockGuard(hass, self)
         self.dr = DRMonitor(hass, self)
         super().__init__(
             hass,
@@ -124,13 +129,32 @@ class HeaterCoordinator(DataUpdateCoordinator):
             try:
                 state = await self.client.read_state()
             except (BleakError, TimeoutError, ProtocolError) as err:
+                self.clock_guard.unavailable()
                 raise UpdateFailed(str(err)) from err
             try:
                 await self.dr.async_load()
                 await self.clock.async_load()
             except (OSError, ValueError) as err:
                 LOGGER.warning("Could not load diagnostic history: %s", type(err).__name__)
+            try:
+                if self.tariff_busy:
+                    self.clock_guard.reset_observations("Tariff update in progress")
+                else:
+                    await self.clock_guard.async_observe(state)
+            except (OSError, ValueError, KeyError, TypeError) as err:
+                # A malformed/unavailable tariff must not hide the heater's core readings.
+                self.clock_guard.unavailable("Clock verification data unavailable")
+                LOGGER.warning("Clock verification unavailable: %s", type(err).__name__)
             return state
+
+    async def async_set_automatic_clock(self, enabled):
+        async with self.command_lock:
+            self.options[CONF_AUTO_CLOCK] = enabled
+            self.clock_guard.reset_observations()
+            self.hass.config_entries.async_update_entry(
+                self.entry, options={**self.entry.options, CONF_AUTO_CLOCK: enabled}
+            )
+            self.async_update_listeners()
 
     @property
     def tariff_plan(self):
@@ -242,6 +266,7 @@ class HeaterCoordinator(DataUpdateCoordinator):
 
     async def async_set_value(self, register, value, *, expected_mode=None):
         async with self.command_lock:
+            self.clock_guard.reset_observations()
             try:
                 state = await self.client.set_value(register, value, expected_mode=expected_mode)
             except (BleakError, TimeoutError, ProtocolError) as err:
@@ -310,6 +335,7 @@ class HeaterCoordinator(DataUpdateCoordinator):
 
     async def async_set_clock(self):
         async with self.command_lock:
+            self.clock_guard.reset_observations("Manual clock setting; awaiting verification")
             previous = self.client.clock_operation
             try:
                 result = await self.client.set_clock(self.local_now)
@@ -350,6 +376,7 @@ class HeaterCoordinator(DataUpdateCoordinator):
 
     async def _async_apply_tariff(self, plan, preference, *, restore):
         async with self.command_lock:
+            self.clock_guard.reset_observations()
             if self.tariff_state is None:
                 self.tariff_state = await self.tariff_store.async_load() or {}
             if self.tariff_state.get("last_operation", {}).get("outcome") == "partial_or_unconfirmed":
@@ -405,6 +432,7 @@ class HeaterCoordinator(DataUpdateCoordinator):
                         {
                             "applied_plan": plan,
                             "applied_preference": preference,
+                            "applied_schedule": schedule,
                             "applied_at": self.local_now().isoformat(),
                         }
                     )

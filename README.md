@@ -27,14 +27,15 @@ This is an independent community integration, not an official A. O. Smith produc
 | Savings preference | More Hot Water, More Savings or Most Savings; applies the complete tariff schedule |
 | Electricity tariff | Current configured utility and rate, such as **PSEG 194** |
 | Hot Water Plus | Off and levels 1–3, shown automatically when supported |
-| Hot water availability | Low, Medium and High displayed as 0%, 50% and 100% |
+| Hot water level | Heater-reported Low, Medium or High; no claim of measured tank volume |
 | Energy usage | Cumulative kWh, compatible with the Energy dashboard |
 | Error status | Current fault description and code |
-| Manual clock setting | Explicit Synchronize clock button; no automatic writes |
-| DR investigation | Read-only snapshots and bounded monitoring with timestamped register differences |
+| Clock synchronization | Verifies tariff transitions, reports desync and permits one bounded correction |
+| Active demand response | Current Baseline, DR1, DR2, DR3 or Load up status |
+| Troubleshooting | Download diagnostics and read-only diagnostic actions; no diagnostic entities |
 
-Version 2 keeps everyday controls on the device page and diagnostic tools disabled
-by default. Existing pairing credentials, entity identities and saved tariff data
+Version 3 keeps everyday controls on the device page and removes development
+diagnostic buttons and status entities. Existing pairing credentials, entity identities and saved tariff data
 carry forward when upgrading.
 
 ## Installation
@@ -133,52 +134,82 @@ data:
 
 Electric and Guest accept 1–7 days. Vacation accepts 1–99, or 100 for Until changed.
 
-**Availability:** 0%, 50% and 100% are the heater's Low, Medium and High categories,
-not measured remaining gallons. Other raw codes display Unknown.
+**Hot water level:** Low, Medium and High are categories reported by the heater.
+Low does not mean the tank contains no usable hot water. Other codes display
+Unknown. If Low persists after heating, compare with iCOMM's indicator and actual
+hot-water delivery; the integration cannot distinguish a stale heater estimate
+from a genuine low level or measure the tank temperature.
+
+The older percentage entity retains its identity and 0/50/100 values for existing
+automations, and is renamed **Hot water availability index**. It is disabled by
+default for new installations. Existing enabled entities are left enabled; you can
+disable the index after updating your dashboard to Hot water level.
 
 **Energy:** the cumulative kWh sensor can be added to the Energy dashboard.
 Instantaneous power and historical cloud data are not provided.
 
-**Clock:** automatic setting is removed in 2.2.0. Startup, reconnects, polling,
-DST/timezone changes, tariff uploads and savings changes never set the clock.
-Use **Synchronize clock** explicitly when needed. This button uses Home Assistant's
-configured local timezone and retains its acknowledgement/readback in diagnostics.
-It is re-enabled on upgrade only if the integration previously disabled it; a
-user-disabled button stays disabled.
+**Clock:** **Automatic clock correction** is enabled by default. The integration
+compares the selected tariff's value-changing boundaries with the heater's live
+DR status. The **Clock synchronization** sensor shows progress and any detected
+desync. Its attributes retain the last desync time, event count, correction outcome
+and last verified transition, even after timing is verified again.
 
-The observed 26:3–4 readback may retain the last written date/hour with zero
-minutes. It is not a verified running clock and must not trigger drift correction.
+A check requires a fully confirmed tariff, Hybrid mode, clear utility/override
+status, and fresh observations before and after the boundary. It allows three
+minutes for the transition, then requires three mismatched readings spanning at
+least one minute. It pauses for gaps, changed mode/setpoint, holidays and the
+following day, season-change dates, and DST-change dates. Boundaries that keep
+the same DR value cannot verify timing. Keep the default 30-second poll interval;
+read gaps over 90 seconds invalidate a check.
 
-### Investigating active demand response
+A missed transition raises **Clock desync detected** and a persistent notification.
+This is an inference from missed tariff execution, not a direct measurement of
+clock drift. Before correction, the integration reads the complete device schedule
+and checks that it still matches the saved tariff, then rereads live status. A
+mismatch or changed conditions stops correction. An accepted clock write remains
+**Clock set; awaiting verification** until a later on-time transition is observed.
+There is at most one automatic write per unresolved desync episode and at most
+one per 24 hours; the limit survives restarts and failed writes. A further missed
+transition after a correction requires manual attention.
 
-Enable **Capture DR status**, **Monitor DR for 3 hours**, **Stop DR monitoring** and
-optionally **DR monitoring status** in the device's disabled entities.
+Turn Automatic clock correction off to keep detection without clock writes.
+**Synchronize clock** remains available for an explicit manual setting using HA's
+configured local timezone. Startup, reconnects and tariff uploads do not themselves
+set the clock. Register 26:3–4 can retain the last written hour with zero minutes;
+that readback is never used to infer drift.
 
-1. Press **Capture DR status** for one snapshot, or **Monitor DR for 3 hours** well
-   before a tariff boundary. The monitor captures immediately, then approximately
-   once per minute. A capture can take about 15 seconds; each register has its own
-   read timestamp, so a snapshot is not an atomic device-wide measurement.
-2. Leave the heater connected through the transition. Keep its mode, setpoint,
-   tariff and clock unchanged during the observation to make comparisons useful.
-3. Wait for completion or press **Stop DR monitoring**. Download the integration's
-   diagnostics. `dr_diagnostics.captures` contains raw decimal/hex values, rejected
-   or unread addresses, host timezone, clock-write context, and differences from
-   the previous capture. The last 400 captures survive reload/restart; monitoring
-   stops on unload/restart and does not restart itself. Starting a session keeps
-   existing captures, evicting the oldest only when the history limit is reached.
+**Active demand response** decodes the upper byte of register 27:0. An owner capture
+observed DR1 → Baseline at the selected 22:00 tariff boundary. DR2, DR3 and Load up
+labels follow the app's schedule encoding and still need equivalent live captures.
+This sensor does not report which heating element or compressor is running.
+Electric mode is not yet validated for tariff timing, so clock verification pauses
+there; the integration does not promise that Electric heating stops at peak rates.
 
-The capture reads all 26 words in the app-declared block 27 plus the existing
-known control, clock, preference and energy context. It skips the already rejected
-28:113 candidate. No heater register writes or pairing enrollment are sent.
-Unmapped words remain explicitly unmapped; `active_dr_level` remains unknown.
-A changing word is a candidate for further verification, not proof of DR1/DR2
-or a compressor/element status mapping. Separately read multiword energy values
-are raw research data; use the normal energy sensor for cumulative consumption.
+### Troubleshooting actions
 
-For a different observation length, use **Developer tools → Actions → AO Smith
-Local BLE: Start DR monitoring**, select the heater, and choose 1–360 minutes.
-The `aosmith_ble.capture_dr_status` and `aosmith_ble.stop_dr_monitor` actions are
-also available. These actions can be used in your own HA automations.
+Use **Settings → Devices & services → AO Smith Local BLE → Download diagnostics**
+for current readings, clock verification/history, versions and saved evidence.
+There are no diagnostic-only buttons or sensors on the public device page.
+
+For additional evidence, open **Developer tools → Actions** and select the heater:
+
+- **Capture DR status** reads one timestamped status snapshot.
+- **Start DR monitoring** captures about once per minute for 1–360 minutes (default
+  180); **Stop DR monitoring** ends the session early.
+- **Inspect extended registers** reads the known diagnostic registers.
+- **Read stored tariff schedule** reads all stored tariff bytes.
+
+Wait for the completion notification before downloading diagnostics. Captures
+include raw values, read errors, per-register timestamps, mode, setpoint and fault
+context. A capture took about 30 seconds on the tested connection; it is not atomic.
+The latest 400 DR captures survive restart. Monitoring stops on unload/restart and
+does not resume itself. The actions only read registers; automatic clock correction
+is a separate policy controlled by its switch. Unmapped values remain unmapped.
+
+For an automation, the DR actions are `aosmith_ble.capture_dr_status`,
+`aosmith_ble.start_dr_monitor` and `aosmith_ble.stop_dr_monitor`, targeted with
+`config_entry_id`. The extended actions are `aosmith_ble.inspect_registers` and
+`aosmith_ble.inspect_schedule`.
 
 ### Branding
 
@@ -200,14 +231,11 @@ downloaded Python modules.
 If the heater is unavailable, enable its Bluetooth, check adapter/proxy range
 and close any other app using the connection. Keep the existing pairing identifier.
 
-For a diagnostic capture, enable **Inspect extended registers** or **Read stored
-tariff schedule** under the device's disabled entities. Wait for the **AO Smith
-diagnostic read finished** notification before downloading diagnostics. It reports
-completion and unread/error counts. An optional Diagnostic read status sensor is
-also available. Previously enabled inspection buttons remain enabled on upgrade.
-These additional diagnostic entities are retained for the remaining hardware tests;
-they will be removed after testing is complete. Standard **Download diagnostics**
-and internal troubleshooting records will remain.
+Upgrading to 3.0 removes retired development diagnostic entities, including any
+that were previously enabled. Automations using those buttons must switch to the
+actions listed above. Pairing, tariff backups, diagnostic history and normal
+control identities are preserved. Running/downloaded versions are available in
+Download diagnostics.
 
 Report issues with your heater model, firmware, HA/integration version and
 relevant logs at [GitHub Issues](https://github.com/spikked27/AOSmith-BLE/issues).

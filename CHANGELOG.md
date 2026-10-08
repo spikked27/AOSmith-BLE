@@ -1,3 +1,22 @@
+# 3.0.0 — October 7, 2026
+
+- Verify actual value-changing tariff transitions through 27:0, with a three-minute
+  grace period and repeated fresh before/after observations. Expose clock desync,
+  event count, last detection/correction/verification and persistent notifications.
+- Restore bounded automatic clock correction after a complete matching schedule
+  readback and fresh eligibility checks. Require Hybrid mode, clear overrides and
+  a confirmed tariff; pause on gaps, changed context and ambiguous calendar dates.
+  Persist one-attempt-per-unresolved-episode and 24-hour limits before sending.
+- Add Active demand response and Automatic clock correction controls. Keep manual
+  clock setting; neither startup nor a tariff upload writes the clock by itself.
+- Show Low/Medium/High as Hot water level. Retain the legacy numeric availability
+  index and identity for existing automations; disable it by default for new installs.
+- Remove all development diagnostic buttons and status entities on upgrade,
+  including previously enabled ones. Preserve history and expose read-only
+  inspection actions; versions remain in Download diagnostics.
+- Add precise live-read timestamps and mode/setpoint/fault context to DR captures.
+  Include a redacted 75-sample physical transition fixture and failure-case tests.
+
 # 2.2.0
 
 - Remove every automatic clock-setting path, including tariff uploads. Retain an

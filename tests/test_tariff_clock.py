@@ -19,7 +19,7 @@ from test_client import IDENTIFIER, FakePeripheral, reply
 
 from custom_components.aosmith_ble.client import HeaterClient
 from custom_components.aosmith_ble.config_flow import OptionsFlow
-from custom_components.aosmith_ble.const import DOMAIN, ENERGY_PREFERENCE, VERSION
+from custom_components.aosmith_ble.const import DOMAIN, ENERGY_PREFERENCE
 from custom_components.aosmith_ble.coordinator import HeaterCoordinator
 from custom_components.aosmith_ble.protocol import (
     ProtocolError,
@@ -31,7 +31,6 @@ from custom_components.aosmith_ble.protocol import (
     write_words_frame,
 )
 from custom_components.aosmith_ble.schedule import build_schedule, decode_season, season_words
-from custom_components.aosmith_ble.sensor import DiagnosticReadStatus, IntegrationVersion
 from custom_components.aosmith_ble.tariff import TariffError, TariffLookup, cache_plan, validate_plan
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -376,12 +375,9 @@ async def test_diagnostic_status_finishes_and_notifies_after_capture(tmp_path, s
             "custom_components.aosmith_ble.coordinator.persistent_notification.async_create"
         ) as notice:
             await coordinator.async_inspect_registers()
-        assert DiagnosticReadStatus(coordinator).native_value == status
+        assert coordinator.diagnostic_status["status"] == status
         assert coordinator.diagnostic_status["completed_at"] is not None
         assert "download diagnostics now" in notice.call_args.args[1]
-        coordinator.installed_version = "1.4.0"
-        version = IntegrationVersion(coordinator)
-        assert version.native_value == VERSION and version.extra_state_attributes["restart_required"]
     await hass.async_stop()
 
 

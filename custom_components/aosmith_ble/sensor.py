@@ -1,12 +1,13 @@
 """Hot-water availability and cumulative energy usage."""
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
-from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfEnergy
+from homeassistant.const import PERCENTAGE, UnitOfEnergy
 
-from .const import DOMAIN, VERSION
+from .const import DOMAIN
 from .entity import HeaterEntity
 from .protocol import decode_availability
 from .tariff import tariff_label
+from .timing import DR_NAMES, decode_dr
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -16,21 +17,19 @@ async def async_setup_entry(hass, entry, async_add_entities):
             HeaterSensor(coordinator, "availability"),
             EnergySensor(coordinator),
             TariffSensor(coordinator),
-            DiagnosticReadStatus(coordinator),
-            DRMonitorStatus(coordinator),
-            IntegrationVersion(coordinator),
+            HotWaterLevel(coordinator),
+            ActiveDRLevel(coordinator),
+            ClockStatus(coordinator),
         ]
     )
 
 
-class DiagnosticReadStatus(HeaterEntity, SensorEntity):
-    _attr_name = "Diagnostic read status"
-    _attr_icon = "mdi:clipboard-check-outline"
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
+class ClockStatus(HeaterEntity, SensorEntity):
+    _attr_name = "Clock synchronization"
+    _attr_icon = "mdi:clock-check-outline"
 
     def __init__(self, coordinator):
-        super().__init__(coordinator, "diagnostic_read_status")
+        super().__init__(coordinator, "clock_synchronization")
 
     @property
     def available(self):
@@ -38,60 +37,54 @@ class DiagnosticReadStatus(HeaterEntity, SensorEntity):
 
     @property
     def native_value(self):
-        return self.coordinator.diagnostic_status["status"]
+        return self.coordinator.clock_guard.data["status"]
 
     @property
     def extra_state_attributes(self):
-        return dict(self.coordinator.diagnostic_status)
+        return dict(self.coordinator.clock_guard.data)
 
 
-class DRMonitorStatus(HeaterEntity, SensorEntity):
-    _attr_name = "DR monitoring status"
-    _attr_icon = "mdi:clipboard-pulse-outline"
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
+class ActiveDRLevel(HeaterEntity, SensorEntity):
+    _attr_name = "Active demand response"
+    _attr_icon = "mdi:transmission-tower"
 
     def __init__(self, coordinator):
-        super().__init__(coordinator, "dr_monitor_status")
+        super().__init__(coordinator, "active_dr_level")
 
     @property
     def available(self):
-        return True
+        return super().available and decode_dr(self.coordinator.data.registers.get("dr_status")) is not None
 
     @property
     def native_value(self):
-        return self.coordinator.dr.data["status"]
+        return DR_NAMES.get(decode_dr(self.coordinator.data.registers.get("dr_status")))
 
     @property
     def extra_state_attributes(self):
-        # Keep large raw capture arrays out of HA's state machine and recorder.
-        return {key: value for key, value in self.coordinator.dr.data.items() if key != "captures"}
+        return {"raw_value": self.coordinator.data.registers.get("dr_status")}
 
 
-class IntegrationVersion(HeaterEntity, SensorEntity):
-    _attr_name = "Integration version"
-    _attr_icon = "mdi:information-outline"
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
+class HotWaterLevel(HeaterEntity, SensorEntity):
+    _attr_name = "Hot water level"
+    _attr_icon = "mdi:water"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["Low", "Medium", "High"]
 
     def __init__(self, coordinator):
-        super().__init__(coordinator, "integration_version")
-
-    @property
-    def available(self):
-        return True
+        super().__init__(coordinator, "hot_water_level")
 
     @property
     def native_value(self):
-        return VERSION
+        return {0: "Low", 5: "Medium", 10: "High"}.get(self.coordinator.data.availability)
 
     @property
     def extra_state_attributes(self):
-        installed = self.coordinator.installed_version
+        state = self.coordinator.data
         return {
-            "running_version": VERSION,
-            "downloaded_version": installed,
-            "restart_required": installed is not None and installed != VERSION,
+            "raw_value": state.availability,
+            "raw_word": state.availability_word,
+            "last_read_at": state.availability_read_at,
+            "interpretation": "Heater-reported category; not measured remaining tank volume",
         }
 
 
@@ -128,7 +121,8 @@ class TariffSensor(HeaterEntity, SensorEntity):
 
 
 class HeaterSensor(HeaterEntity, SensorEntity):
-    _attr_name = "Hot water availability"
+    _attr_name = "Hot water availability index"
+    _attr_entity_registry_enabled_default = False
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 0
     _attr_icon = "mdi:water"

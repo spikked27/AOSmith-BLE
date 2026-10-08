@@ -44,6 +44,7 @@ from .protocol import (
     write_words_frame,
 )
 from .schedule import decode_season, season_words, validate_payloads
+from .timing import DR_NAMES, decode_dr
 
 LOGGER = logging.getLogger(__name__)
 
@@ -57,6 +58,8 @@ class HeaterState:
     mode_days: int = 0
     registers: dict[str, int] = field(default_factory=dict)
     availability_word: int | None = None
+    availability_read_at: str | None = None
+    register_read_at: dict[str, str] = field(default_factory=dict)
 
 
 class HeaterClient:
@@ -252,6 +255,7 @@ class HeaterClient:
         temperature = await self._read(SETPOINT)
         mode = await self._read(MODE)
         availability = await self._read(AVAILABILITY)
+        availability_read_at = datetime.now(timezone.utc).isoformat()
         fault = await self._read(FAULT)
         requested = dict(self.optional_registers)
         if mode & 0xFF in TIMED_MODE_REGISTERS:
@@ -267,12 +271,15 @@ class HeaterClient:
             mode >> 8,
             registers,
             availability_word=availability,
+            availability_read_at=availability_read_at,
+            register_read_at=dict(self.optional_read_at),
         )
 
     async def _read_optional(self, registers, *, retry_unsupported=False):
         """Bounded known-register reads; failures never invalidate the core snapshot."""
         values = {}
         self.optional_errors = {}
+        self.optional_read_at = {}
         for key, register in registers.items():
             if register in self.unsupported_registers and not retry_unsupported:
                 self.optional_errors[key] = "Unsupported; use Inspect to retry"
@@ -289,6 +296,7 @@ class HeaterClient:
                     values[key] = (words[0] << 32) | (words[1] << 16) | words[2]
                 else:
                     values[key] = await self._read(register)
+                self.optional_read_at[key] = datetime.now(timezone.utc).isoformat()
                 self.optional_retry_after.pop(register, None)
                 self.unsupported_registers.discard(register)
             except StatusError as err:
@@ -349,7 +357,7 @@ class HeaterClient:
     async def inspect_dr_status(self):
         """Read the APK's 26-word status block plus known context; never write registers.
 
-        Block 27's unnamed offsets are candidates, not identified DR states.
+        Only 27:0 is interpreted as DR; other unnamed offsets remain candidates.
         Timestamp every row because a snapshot is a sequence, not an atomic read.
         """
         names = {reg: name for name, reg in INSPECT_REGISTERS.items() if reg != (28, 113)}
@@ -394,6 +402,7 @@ class HeaterClient:
                 raise
             finally:
                 result["time"] = datetime.now(timezone.utc).isoformat()
+        result["active_dr_level"] = DR_NAMES.get(decode_dr(result["registers"]["27:0"]["raw"]))
         return result
 
     async def _write_words_confirmed(self, register, words, *, record=None):

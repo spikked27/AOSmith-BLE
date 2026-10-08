@@ -8,6 +8,7 @@ WRITE_UUID = "69400003-b5a3-f393-e0a9-e50e24dcca99"
 CONF_IDENTIFIER = "pairing_identifier"
 CONF_PIN = "pin"
 CONF_INTERVAL = "poll_interval"
+CONF_AUTO_CLOCK = "automatic_clock_correction"
 DEFAULT_INTERVAL = 30
 MODES = {"Electric": 1, "Vacation": 2, "Guest": 3, "Hybrid": 4, "Heat pump": 5}
 MODE_NAMES = {1: "Electric", 2: "Vacation", 3: "Guest", 4: "Hybrid", 5: "Heat pump"}
@@ -19,7 +20,7 @@ FAULT = (2, 7)
 MIN_TEMP_F = 95
 MAX_TEMP_F = 150
 
-VERSION = "2.2.0"
+VERSION = "3.0.0"
 CONF_ENERGY_PREFERENCE = "enable_experimental_energy_preference"
 ENERGY_PREFERENCE = (28, 75)
 CLOCK = (26, 3)
@@ -29,7 +30,10 @@ DEFAULT_MODE_DAYS = {1: 1, 2: 7, 3: 1}
 
 def clean_options(options):
     """Keep supported controls and a deliberately selected cached rate plan."""
-    result = {CONF_INTERVAL: options.get(CONF_INTERVAL, DEFAULT_INTERVAL)}
+    result = {
+        CONF_INTERVAL: options.get(CONF_INTERVAL, DEFAULT_INTERVAL),
+        CONF_AUTO_CLOCK: options.get(CONF_AUTO_CLOCK, True) is True,
+    }
     tariff = options.get("tariff")
     if isinstance(tariff, dict) and tariff.get("schema_version") == 1:
         result["tariff"] = tariff
@@ -53,6 +57,14 @@ UTILITY_OVERRIDE = (27, 3)
 CTA_PRESENT = (27, 25)
 ADVANCED_LOAD = (28, 13)
 UTILITY_ENROLLMENT = (28, 109)
+CLOCK_STATUS_REGISTERS = {
+    "utility_override": UTILITY_OVERRIDE,
+    "cta_present": CTA_PRESENT,
+    "utility_enrollment": UTILITY_ENROLLMENT,
+    "advanced_load": ADVANCED_LOAD,
+    # Last: timestamp the DR word after its gating context is read.
+    "dr_status": (27, 0),
+}
 OPTIONAL_REGISTERS = {
     "maximum_setpoint": MAX_SETPOINT,
     "remote_setpoint": REMOTE_SETPOINT,
@@ -68,6 +80,10 @@ ENERGY_PREFERENCE_CANDIDATES = {
     "energy_preference_candidate_ble": (28, 113),
 }
 INSPECT_REGISTERS = {
+    "target_temperature": SETPOINT,
+    "operating_mode": MODE,
+    "fault_status": FAULT,
+    "dr_status": (27, 0),
     **ENERGY_PREFERENCE_CANDIDATES,
     "clock_candidate_low": (26, 3),
     "clock_candidate_high": (26, 4),

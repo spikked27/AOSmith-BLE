@@ -11,6 +11,7 @@ PLATFORMS = [
     Platform.BUTTON,
     Platform.BINARY_SENSOR,
     Platform.SELECT,
+    Platform.SWITCH,
 ]
 
 
@@ -30,7 +31,7 @@ async def async_setup_entry(hass, entry):
         hass.config_entries.async_update_entry(entry, options=options)
 
     # Remove only explicitly retired entities owned by this config entry.
-    # Do not purge recorder history or remove current opt-in diagnostic buttons.
+    # Retire development-only entities, preserving recorder and saved diagnostics.
     registry = er.async_get(hass)
     retired = {"utility_override", "advanced_load", "utility_enrollment", "cta_present"}
     retired |= {key + "_control" for key in retired}
@@ -45,6 +46,16 @@ async def async_setup_entry(hass, entry):
         "electric_days",
         "mode_duration",
         "restore_energy_preference",
+        "refresh",
+        "reconnect",
+        "inspect",
+        "inspect_schedule",
+        "inspect_dr",
+        "start_dr_monitor",
+        "stop_dr_monitor",
+        "diagnostic_read_status",
+        "dr_monitor_status",
+        "integration_version",
     }
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
         if entity.platform == DOMAIN and any(entity.unique_id.endswith("_" + key) for key in retired):
@@ -126,5 +137,6 @@ async def async_migrate_entry(hass, entry):
                 and entity.disabled_by == er.RegistryEntryDisabler.INTEGRATION
             ):
                 registry.async_update_entity(entity.entity_id, disabled_by=None)
-        hass.config_entries.async_update_entry(entry, minor_version=5, options=clean_options(entry.options))
+    if entry.minor_version < 6:
+        hass.config_entries.async_update_entry(entry, minor_version=6, options=clean_options(entry.options))
     return True

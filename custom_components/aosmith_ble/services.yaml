@@ -70,3 +70,25 @@ stop_dr_monitor:
       selector:
         config_entry:
           integration: aosmith_ble
+
+inspect_registers:
+  name: Inspect extended registers
+  description: Read the known diagnostic registers and retain results in Download diagnostics. Does not change heater settings.
+  fields:
+    config_entry_id:
+      name: Water heater
+      required: true
+      selector:
+        config_entry:
+          integration: aosmith_ble
+
+inspect_schedule:
+  name: Read stored tariff schedule
+  description: Read the complete tariff schedule and retain results in Download diagnostics. Does not change heater settings.
+  fields:
+    config_entry_id:
+      name: Water heater
+      required: true
+      selector:
+        config_entry:
+          integration: aosmith_ble

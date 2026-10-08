@@ -84,7 +84,7 @@
       },
       "tariff_confirm": {
         "title": "Apply tariff to water heater",
-        "description": "{utility} · {tariff}\n\nChoose your savings preference. Home Assistant applies the complete tariff schedule. Clock setting is manual; use Synchronize clock separately if needed. Allow several minutes.\n\n{detail}",
+        "description": "{utility} · {tariff}\n\nChoose your savings preference. Home Assistant applies the complete tariff schedule. Clock synchronization is checked at later tariff transitions. Use Synchronize clock for an immediate manual setting. Allow several minutes.\n\n{detail}",
         "data": {
           "preference": "Savings preference"
         }

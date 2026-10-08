@@ -18,7 +18,11 @@ python scripts/build_release.py
 Add focused regressions for protocol or lifecycle changes. Use captured, redacted
 frames or a simulated peripheral; mark hardware assumptions explicitly. Keep
 writes serialized, preserve original backups, and never replay a write to resolve
-an ambiguous acknowledgement. Polling must not change heater settings.
+an ambiguous acknowledgement. Ordinary polling must not change heater settings.
+The sole automatic-write exception is ClockGuard: a missed value-changing tariff
+transition with fresh before/after evidence, verified device schedule and fresh
+eligibility checks. Preserve its one-attempt-per-episode and 24-hour durable limits;
+never use the non-ticking clock readback to trigger correction.
 
 Pull requests should explain the user-facing change, validation and model coverage.
 Do not include proprietary app binaries, raw private diagnostics or credentials.

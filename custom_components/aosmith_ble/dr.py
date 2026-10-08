@@ -1,4 +1,4 @@
-"""Opt-in, bounded read-only DR investigations. Raw values are not decoded DR levels."""
+"""Opt-in, bounded read-only DR investigations. Raw values and observed DR codes."""
 
 import asyncio
 from contextlib import suppress
@@ -47,7 +47,9 @@ class DRMonitor:
                 self.data["status"] = "Interrupted by restart"
                 await self.store.async_save(self.data)
         self.data["active_dr_level"] = None
-        self.data["interpretation"] = "Raw status investigation; no verified active DR register"
+        self.data["interpretation"] = (
+            "27:0 upper byte: 6 to 0 observed at tariff boundary; other codes follow app schedule encoding"
+        )
         self.loaded = True
 
     async def async_capture(self, *, source="manual", deadline=None):
@@ -72,6 +74,7 @@ class DRMonitor:
             capture["compared_to"] = history[-1]["started_at"] if history else None
             history.append(capture)
             self.data["captures"] = history[-HISTORY_LIMIT:]
+            self.data["active_dr_level"] = capture.get("active_dr_level")
             self.data["last_capture_at"] = capture["time"]
             self.data["last_capture_complete"] = capture["complete"]
             self.data["retained_captures"] = len(self.data["captures"])
@@ -135,7 +138,7 @@ class DRMonitor:
                 persistent_notification.async_create(
                     self.hass,
                     f"DR monitoring: {self.data['status']}. Download integration diagnostics to review "
-                    "timestamped raw readings and changes. Active DR levels remain unverified.",
+                    "timestamped raw readings and changes.",
                     title="AO Smith DR monitoring finished",
                     notification_id=f"{DOMAIN}_{self.coordinator.entry.entry_id}_dr",
                 )
