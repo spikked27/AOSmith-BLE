@@ -44,7 +44,7 @@ from .protocol import (
     write_words_frame,
 )
 from .schedule import decode_season, season_words, validate_payloads
-from .timing import DR_NAMES, decode_dr
+from .timing import DR_NAMES, decode_dr, schedule_digest
 
 LOGGER = logging.getLogger(__name__)
 
@@ -409,19 +409,29 @@ class HeaterClient:
         """One write followed by fresh readback; a missing ACK never triggers another write."""
         words = tuple(words)
         packet = write_words_frame(*register, words)
-        detail = {"register": list(register), "requested_words": list(words)}
+        detail = {
+            "register": list(register),
+            "requested_words": list(words),
+            "ack_timeout_seconds": self._timeout,
+        }
         if record is not None:
             record["last_write"] = detail
         try:
             ack = await self._request(
                 packet,
-                lambda reply: reply[1] in (0x02, 0x04) and (len(reply) == 5 or reply[3:5] == bytes(register)),
-                timeout=min(2, self._timeout),
+                lambda reply: (
+                    reply[1] in (0x02, 0x04)
+                    and (len(reply) == 5 or (len(reply) == 7 and reply[3:5] == bytes(register)))
+                ),
             )
             detail["ack"] = ack.hex().upper()
         except TimeoutError:
             detail["ack"] = "Not received; checking readback without repeating the write"
-        actual = await self._read_words(register, len(words))
+            # The heater may still be processing the write. A new session prevents
+            # a late reply from being mistaken for the next request's response.
+            await self._close()
+            await self._ensure_session()
+        actual = await self._read_words_recover(register, len(words))
         detail["after"] = list(actual)
         if actual != words:
             raise ProtocolError(f"Readback mismatch at {register[0]}:{register[1]}; write was not repeated")
@@ -506,10 +516,20 @@ class HeaterClient:
                 await self._close()
                 raise
 
+    async def _read_words_recover(self, register, count=1):
+        """Retry a read once on a fresh session; never resend its preceding write."""
+        try:
+            return await self._read_words(register, count)
+        except (BleakError, TimeoutError) as err:
+            self._record("read_retry", register=list(register), error=type(err).__name__)
+            await self._close()
+            await self._ensure_session()
+            return await self._read_words(register, count)
+
     async def _read_region(self, block, parameter, count):
         words = []
         for offset in range(0, count, 6):
-            words.extend(await self._read_words((block, parameter + offset), min(6, count - offset)))
+            words.extend(await self._read_words_recover((block, parameter + offset), min(6, count - offset)))
         return words
 
     async def _capture_schedule(self):
@@ -569,6 +589,12 @@ class HeaterClient:
                     )
                 operation["phase"] = "saving_original"
                 await save_original(original)
+                if schedule_digest(original) == schedule_digest(schedule):
+                    operation.update(
+                        outcome="readback_confirmed", phase="already_current", already_current=True
+                    )
+                    LOGGER.info("Tariff already matches all stored bytes; no writes needed")
+                    return dict(operation)
                 operation["outcome"] = "partial_or_unconfirmed"
                 operation["phase"] = "writing_holidays"
                 LOGGER.info("Tariff upload: writing holiday and preference data")
@@ -593,7 +619,7 @@ class HeaterClient:
                             register, words[start : start + count], record=operation
                         )
                         operation["confirmed_chunks"] += 1
-                    checksum = await self._read((block["block"], 62))
+                    checksum = (await self._read_words_recover((block["block"], 62)))[0]
                     operation.setdefault("season_check_words", {})[str(block["block"])] = checksum
                 operation["outcome"] = "readback_confirmed"
                 operation["phase"] = "complete"

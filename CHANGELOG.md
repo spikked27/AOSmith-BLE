@@ -1,3 +1,19 @@
+# 3.0.2 — October 7, 2026
+
+- Wait the full configured BLE response timeout (eight seconds by default) for
+  tariff/clock write acknowledgements. The observed heater response took 4.334
+  seconds; the old two-second shortcut sent a read while the write was pending.
+- Reconnect before reading back an unacknowledged write. Retry a lost schedule or
+  write-readback read once on a fresh session, without resending any write.
+- Require a valid ACK-shaped response; duplicated register data cannot masquerade
+  as a write acknowledgement.
+- Compare all 678 stored bytes before uploading. A matching tariff is confirmed
+  without writes, retaining the original backup and clearing earlier incomplete
+  status only after a successful complete read.
+- Show useful tariff errors identifying the stage and whether writes were sent,
+  instead of an empty HomeAssistantError. Record the same detail in diagnostics.
+- Add 13 regressions, including the captured 4.334-second ACK and repeated replies.
+
 # 3.0.1 — October 7, 2026
 
 - Keep normal heater readings available if a saved tariff from an older version

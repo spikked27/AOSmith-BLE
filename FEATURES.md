@@ -1,6 +1,6 @@
 # Feature coverage
 
-Version 3.0.1 targets next-generation iCOMM heat pumps. The tested heater is an
+Version 3.0.2 targets next-generation iCOMM heat pumps. The tested heater is an
 HPS10-80H45DV with firmware 6.4.
 
 | Feature | Status |

@@ -52,6 +52,37 @@ def _installed_version():
     return json.loads(Path(__file__).with_name("manifest.json").read_text())["version"]
 
 
+def _tariff_error_message(error, operation):
+    """Explain a failed transfer without leaking backend Bluetooth identifiers."""
+    phase = operation.get("phase", "preparing")
+    stage = {
+        "preparing": "preparing the tariff",
+        "reading_original": "reading the existing tariff",
+        "saving_original": "saving the original tariff",
+        "writing_holidays": "updating holiday and savings settings",
+    }.get(phase, "updating the seasonal schedule")
+    if isinstance(error, TimeoutError):
+        detail = f"The heater did not respond in time while {stage}."
+    elif isinstance(error, BleakError):
+        detail = f"Bluetooth communication failed while {stage}."
+    elif isinstance(error, OSError):
+        detail = "Home Assistant could not save tariff data. Check available storage and logs."
+    elif isinstance(error, (ProtocolError, TariffError, ValueError, HomeAssistantError)):
+        detail = str(error) or "The tariff operation could not complete."
+    else:
+        detail = "The saved tariff data is incomplete or invalid."
+    if operation.get("outcome") == "partial_or_unconfirmed":
+        return (
+            detail
+            + " The upload is incomplete. Check the Bluetooth connection and apply the desired tariff again."
+        )
+    if operation.get("outcome") == "readback_confirmed":
+        return (
+            detail + " The heater tariff was confirmed; apply it again to save the result in Home Assistant."
+        )
+    return detail + " No tariff writes were sent."
+
+
 def make_client(hass, data):
     """Use HA's shared Bluetooth infrastructure, including active proxies."""
     address = data[CONF_ADDRESS]
@@ -457,7 +488,9 @@ class HeaterCoordinator(DataUpdateCoordinator):
                     if isinstance(err, (ProtocolError, TariffError, ValueError))
                     else type(err).__name__
                 )
-                raise HomeAssistantError(str(err)) from err
+                detail = _tariff_error_message(err, self.client.schedule_operation)
+                self.client.schedule_operation["error_detail"] = detail
+                raise HomeAssistantError(detail) from err
             finally:
                 outcome = self.client.schedule_operation.get("outcome")
                 if outcome in ("partial_or_unconfirmed", "readback_confirmed"):

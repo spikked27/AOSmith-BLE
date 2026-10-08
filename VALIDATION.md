@@ -1,8 +1,8 @@
-# Version 3.0.1 validation
+# Version 3.0.2 validation
 
 Reviewed October 7, 2026. Automated checks use Python 3.13.15 and Home Assistant
 2025.12.5, the supported minimum series. The owner's installation runs HA 2026.9.4.
-**282 tests pass locally**, plus Ruff lint/format and release archive validation.
+**295 tests pass locally**, plus Ruff lint/format and release archive validation.
 The GitHub Tests workflow gates publication of the versioned release.
 
 ## Software coverage
@@ -117,3 +117,25 @@ The reported HAOS shutdown screenshot shows services stopping and Supervisor
 waiting, not its initiating cause. No host shutdown was reproduced or invoked by
 this integration. Corrected upload lifecycle defects are covered by tests without
 claiming they caused that shutdown.
+
+## Tariff timeout recovery in 3.0.2
+
+The October 7 23:05 owner diagnostics run integration 3.0.1 on HA 2026.10.0.
+One attempt timed out reading the existing tariff before writes; the next confirmed
+three holiday chunks, then waited only two seconds for the 28:68 write ACK. The
+positive `DB02071C4480D4` reply arrived 4.334155 seconds after the write, after a
+readback request had already been sent. That read timed out. Normal polls recovered;
+this is not evidence of a rejected rate plan or lost pairing.
+
+The pre-write capture matched every season and extra-data byte of the requested
+PSEG 195 / More Savings schedule. The matching-schedule test now confirms that
+state without any writes. A late-ACK regression reproduces the observed 4.334155
+second delay and five identical replies, and requires waiting before readback.
+These and the empty-error regression fail on 3.0.1 and pass with the correction.
+
+Further tests cover single reconnect/read retry during initial capture or chunk
+readback, stopping after a second failure, missing ACK recovery, rejecting stale
+read data as an ACK, full comparison of preference/tail words, and clearing an
+incomplete upload by fresh complete readback without replacing the original backup.
+No tests permit automatic write replay. Actual post-update transfer reliability
+still requires a retry on the physical heater.

@@ -89,8 +89,9 @@ are never deleted. Home Assistant backups preserve the credentials.
 2. Enter your ZIP code, choose your utility and rate plan, then select a savings
    preference. Lookup uses AO Smith's anonymous tariff service.
 3. Submit and wait for completion. Home Assistant
-   uploads the generated schedule and checks each written portion. This can take
-   several minutes.
+   reads the complete stored schedule first. If all 678 bytes already match, it
+   confirms the tariff without writing it again. Otherwise it uploads the generated
+   schedule and checks each written portion. This can take several minutes.
 4. **Electricity tariff** displays the configured plan, for example **PSEG 194**.
    Its attributes include the full utility and rate name, savings preference,
    update status and the last successful update time.
@@ -102,7 +103,10 @@ The dropdown becomes available after a tariff has been configured.
 
 The tariff sensor shows **Updating** during an upload and **Update incomplete**
 if a write was interrupted or could not be confirmed. Check the connection and
-apply the desired tariff again. The integration retains the original schedule
+apply the desired tariff again. The error detail identifies the failed stage and
+whether any writes were sent. Slow write acknowledgements get the full eight-second
+response window. A lost schedule/readback response gets one reconnect and read retry;
+writes are never automatically replayed. The integration retains the original schedule
 internally and does not automatically repeat writes or restore an old tariff.
 A successfully applied tariff and preference survive Home Assistant restarts.
 
