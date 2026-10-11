@@ -152,8 +152,10 @@ class ClockGuard:
             return
         pre = [(at, value) for at, value in self.samples if boundary - PRE_WINDOW <= at < boundary]
         if self.pending is None and 0 <= stamp - boundary <= CHECK_WINDOW:
-            if len(pre) >= 2 and all(value == transition["before"] for _, value in pre[-2:]):
-                self.pending = {"key": key, "boundary": boundary, "before": transition["before"], "bad": []}
+            if len(pre) >= 2 and pre[-1][1] in transition["before_values"] and pre[-2][1] == pre[-1][1]:
+                # Load up may start late or never appear. Require a stable actual
+                # pre-boundary level and retain it through the pre-write check.
+                self.pending = {"key": key, "boundary": boundary, "before": pre[-1][1], "bad": []}
             elif stamp - boundary > GRACE_SECONDS:
                 self.data.update(status="Waiting for transition", reason="No fresh pre-transition evidence")
         self.samples.append((stamp, actual))
@@ -192,7 +194,7 @@ class ClockGuard:
         if age < GRACE_SECONDS:
             self.data.update(status="Checking transition", reason="Waiting through transition grace period")
             return
-        if actual != transition["before"]:
+        if actual != self.pending["before"]:
             self.pending = None
             self.handled = key
             self.data.update(status="Check unavailable", reason="Unexpected DR value; no clock correction")
@@ -204,6 +206,7 @@ class ClockGuard:
                 status="Checking transition", reason="Confirming missed transition with fresh reads"
             )
             return
+        observed_before = self.pending["before"]
         self.handled = key
         self.pending = None
         if not self.data["desync_active"]:
@@ -237,9 +240,9 @@ class ClockGuard:
                 self.data["reason"] = "Automatic correction is limited to once per 24 hours"
                 await self.store.async_save(self.data)
                 return
-        await self._correct(schedule, context, transition)
+        await self._correct(schedule, context, transition, observed_before)
 
-    async def _correct(self, schedule, context, transition):
+    async def _correct(self, schedule, context, transition, observed_before):
         """Compare device tariff and reread live status before the single write."""
         coordinator = self.coordinator
         try:
@@ -266,7 +269,7 @@ class ClockGuard:
                     status="Check unavailable", reason=reason or "Conditions changed before correction"
                 )
                 return
-            if decode_dr(fresh.registers["dr_status"]) != transition["before"]:
+            if decode_dr(fresh.registers["dr_status"]) != observed_before:
                 self.data.update(
                     status="Late transition observed",
                     reason="Status changed before correction; no write sent",

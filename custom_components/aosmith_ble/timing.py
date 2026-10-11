@@ -58,10 +58,12 @@ def holiday_dates(words, year):
 
 
 def tariff_timing(schedule, now):
-    """Return current level and actual value-changing boundaries, or a pause reason.
+    """Return the programmed level and clock-check boundaries, or a pause reason.
 
     Conservative exclusions prevent holiday, seasonal and DST ambiguity from
-    becoming a clock write. Includes prior-day carry and year-wrapping seasons.
+    becoming a clock write. Load-up onset is not reliable timing evidence. Only
+    changes between non-load-up tariff levels can verify or correct the clock.
+    Includes prior-day carry and year-wrapping seasons.
     """
     if now.tzinfo is None:
         raise ValueError("Local time must include a timezone")
@@ -112,11 +114,24 @@ def tariff_timing(schedule, now):
             seen.add(at)
             events.append((at, event["mode"]))
     events.sort()
-    changes = [
-        {"at": after[0], "before": before[1], "after": after[1]}
-        for before, after in zip(events, events[1:])
-        if before[1] != after[1]
-    ]
+    changes = []
+    prior = None
+    load_up = False
+    for at, mode in events:
+        if mode == 9:
+            load_up = True
+            continue
+        if prior is not None and prior != mode:
+            changes.append(
+                {
+                    "at": at,
+                    "before": prior,
+                    "before_values": (prior, 9) if load_up else (prior,),
+                    "after": mode,
+                }
+            )
+        prior = mode
+        load_up = False
     current = [event for event in events if event[0] <= now]
     previous = [change for change in changes if change["at"] <= now]
     upcoming = [change for change in changes if change["at"] > now]

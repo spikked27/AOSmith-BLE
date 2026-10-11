@@ -1,3 +1,17 @@
+# 3.0.3 — October 11, 2026
+
+- Exclude load-up starts from clock verification after owner history showed
+  repeated false 03:00 desync alerts despite on-time tariff changes. Load up cannot
+  trigger a clock write or resolve a previous desync.
+- Verify the following tariff boundary from a stable preceding tariff level or
+  Load up, including mornings when Load up never appears. Retain the actual
+  observed before-state through repeated checks and the final pre-write read.
+- Preserve the three-minute grace period, schedule comparison, utility/mode guards,
+  durable correction limits and desync history. No new entities or schedule writes.
+- Add regressions based on all four observed morning patterns, explicitly supplying
+  simulated fresh polls between CSV state changes, plus absent-load-up and genuine
+  missed-transition cases.
+
 # 3.0.2 — October 7, 2026
 
 - Wait the full configured BLE response timeout (eight seconds by default) for

@@ -153,7 +153,7 @@ disable the index after updating your dashboard to Hot water level.
 Instantaneous power and historical cloud data are not provided.
 
 **Clock:** **Automatic clock correction** is enabled by default. The integration
-compares the selected tariff's value-changing boundaries with the heater's live
+compares the selected tariff's value-changing Baseline/DR boundaries with the heater's live
 DR status. The **Clock synchronization** sensor shows progress and any detected
 desync. Its attributes retain the last desync time, event count, correction outcome
 and last verified transition, even after timing is verified again.
@@ -165,6 +165,16 @@ least one minute. It pauses for gaps, changed mode/setpoint, holidays and the
 following day, season-change dates, and DST-change dates. Boundaries that keep
 the same DR value cannot verify timing. Keep the default 30-second poll interval;
 read gaps over 90 seconds invalidate a check.
+
+Load-up starts are excluded from clock verification. The owner's October 8–11
+history shows Load up starting at different times while the regular tariff changes
+remain on time. A scheduled load-up start therefore cannot trigger a desync alert,
+write the clock or resolve an existing alert. At the following tariff boundary,
+either the preceding tariff level or Load up can supply the before-state evidence,
+but the last two before-state readings must agree. The heater must then change to
+the scheduled tariff level on time to verify synchronization. For PSEG 195 / More
+Savings in October, this removes the 03:00 check and keeps the 06:00 check.
+The programmed load-up schedule itself is unchanged.
 
 A missed transition raises **Clock desync detected** and a persistent notification.
 This is an inference from missed tariff execution, not a direct measurement of
@@ -183,8 +193,9 @@ set the clock. Register 26:3–4 can retain the last written hour with zero minu
 that readback is never used to infer drift.
 
 **Active demand response** decodes the upper byte of register 27:0. An owner capture
-observed DR1 → Baseline at the selected 22:00 tariff boundary. DR2, DR3 and Load up
-labels follow the app's schedule encoding and still need equivalent live captures.
+observed DR1 → Baseline at the selected 22:00 tariff boundary. Later HA history
+also shows on-time DR1/DR2 transitions and variable Load up starts. DR3 still needs
+an equivalent live capture; the labels follow the app's schedule encoding.
 This sensor does not report which heating element or compressor is running.
 Electric mode is not yet validated for tariff timing, so clock verification pauses
 there; the integration does not promise that Electric heating stops at peak rates.

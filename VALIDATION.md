@@ -1,8 +1,8 @@
-# Version 3.0.2 validation
+# Version 3.0.3 validation
 
-Reviewed October 7, 2026. Automated checks use Python 3.13.15 and Home Assistant
-2025.12.5, the supported minimum series. The owner's installation runs HA 2026.9.4.
-**295 tests pass locally**, plus Ruff lint/format and release archive validation.
+Reviewed October 11, 2026. Automated checks use Python 3.13.15 and Home Assistant
+2025.12.5, the supported minimum series. The latest owner diagnostics report HA 2026.10.0.
+**307 tests pass locally**, plus Ruff lint/format and release archive validation.
 The GitHub Tests workflow gates publication of the versioned release.
 
 ## Software coverage
@@ -139,3 +139,26 @@ read data as an ACK, full comparison of preference/tail words, and clearing an
 incomplete upload by fresh complete readback without replacing the original backup.
 No tests permit automatic write replay. Actual post-update transfer reliability
 still requires a retry on the physical heater.
+
+## Load-up clock-check correction in 3.0.3
+
+Owner HA state-change history for October 8–11 shows checks starting at 03:00 EDT,
+followed by a clock correction or a desync alert. Load up first appears at
+05:33:25, 04:22:33, 05:24:18 and 05:33:48 respectively. DR1 appears at 06:00:54,
+06:00:35, 06:00:50 and 06:00:36, and all recorded regular tariff boundaries during
+those days are within a minute of schedule. This supports excluding load-up onset
+from clock verification. It does not establish the firmware's reason for delaying
+load-up or independently measure its RTC.
+
+Regression tests use these four morning patterns with explicitly simulated fresh
+30-second polls between the state changes. The CSV itself contains no poll history,
+mode/override attributes or detailed clock-write reasons. A fifth synthetic morning
+has no load-up state at all. Each case must avoid overnight alerts and writes and
+verify the 06:00 transition. The relevant regressions fail against 3.0.2.
+
+Further tests require genuine missed morning transitions from either Baseline or
+Load up to retain correction, reject unstable before-state evidence and unexpected
+Load up at unrelated boundaries, and cancel a write if the observed before-state
+changes during schedule verification. Load up cannot resolve an existing desync;
+a later regular tariff change must do so. The durable 24-hour cap still applies
+even after a separate on-time transition resolves the earlier episode.

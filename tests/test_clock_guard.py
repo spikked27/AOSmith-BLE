@@ -125,6 +125,82 @@ def test_only_value_changes_are_boundaries():
     assert timing["next"]["at"].hour == 22
 
 
+def test_load_up_is_not_a_clock_verification_boundary():
+    timing = tariff_timing(FIXTURE["schedule"], BOUNDARY.replace(day=8, hour=3))
+    assert timing["expected"] == 9  # The programmed schedule is unchanged.
+    assert timing["transition"]["at"] == BOUNDARY
+    assert timing["next"]["at"] == BOUNDARY.replace(day=8, hour=6)
+    assert timing["next"]["before_values"] == (0, 9)
+
+
+@pytest.mark.parametrize(
+    "day,load_up,dr1_second",
+    [(8, (5, 33, 25), 54), (9, (4, 22, 33), 35), (10, (5, 24, 18), 50), (11, (5, 33, 48), 36), (8, None, 54)],
+)
+async def test_observed_morning_patterns_do_not_report_desync(harness, day, load_up, dr1_second):
+    """Oct 8–11 state-change times, with simulated fresh polls between changes.
+
+    The CSV contains no poll history. The absent-load-up case is synthetic.
+    """
+    h = harness
+    start = BOUNDARY.replace(day=day, hour=3)
+    boundary = start.replace(hour=6)
+    load_at = start.replace(hour=load_up[0], minute=load_up[1], second=load_up[2]) if load_up else None
+    dr1_at = boundary + timedelta(seconds=dr1_second)
+    for seconds in range(-90, 3 * 3600 + 91, 30):
+        at = start + timedelta(seconds=seconds)
+        code = 6 if at >= dr1_at else 9 if load_at and at >= load_at else 0
+        await h.observe((at - BOUNDARY).total_seconds(), code)
+        guard = h.coordinator.clock_guard
+        assert not guard.data["desync_active"]
+        if at < boundary:
+            assert guard.data["status"] != "Checking transition"
+    assert guard.data["status"] == "In sync"
+    assert guard.data["last_verified_transition"] == boundary.isoformat()
+    assert guard.data["desync_count"] == 0
+    h.client.set_clock.assert_not_awaited()
+    h.client.inspect_schedule.assert_not_awaited()
+
+
+@pytest.mark.parametrize("before", [0, 9])
+async def test_missed_morning_tariff_still_corrects_from_baseline_or_load_up(harness, before):
+    await miss(harness, 8 * 3600, code=before)
+    assert harness.coordinator.clock_guard.data["status"] == "Clock set; awaiting verification"
+    assert harness.coordinator.clock_guard.data["desync_count"] == 1
+    harness.client.set_clock.assert_awaited_once()
+
+
+async def test_changing_preboundary_level_is_not_stable_evidence(harness):
+    h = harness
+    await h.observe(8 * 3600 - 60, 0)
+    await h.observe(8 * 3600 - 30, 9)
+    for seconds in range(0, 301, 30):
+        await h.observe(8 * 3600 + seconds, 9)
+    assert not h.coordinator.clock_guard.data["desync_active"]
+    h.client.set_clock.assert_not_awaited()
+
+
+@pytest.mark.parametrize("hour", [15, 22])
+async def test_load_up_is_not_accepted_before_unrelated_tariff_boundaries(harness, hour):
+    offset = (BOUNDARY.replace(day=8, hour=hour) - BOUNDARY).total_seconds()
+    await miss(harness, offset, code=9)
+    assert not harness.coordinator.clock_guard.data["desync_active"]
+    harness.client.set_clock.assert_not_awaited()
+
+
+async def test_changed_morning_level_before_write_prevents_correction(harness):
+    h = harness
+
+    async def capture():
+        h.client.read_state.return_value = state(h.now, 9)
+        return {**deepcopy(FIXTURE["schedule"]), "complete": True}
+
+    h.client.inspect_schedule.side_effect = capture
+    await miss(h, 8 * 3600, code=0)
+    assert h.coordinator.clock_guard.data["status"] == "Late transition observed"
+    h.client.set_clock.assert_not_awaited()
+
+
 @pytest.mark.parametrize(
     "at,reason",
     [
@@ -177,9 +253,14 @@ async def test_miss_writes_once_and_preserves_desync_until_later_transition(harn
     for seconds in range(270, 901, 30):
         await h.observe(seconds, 0)
     assert guard.data["desync_active"]  # Seeing baseline later cannot establish correct timing.
-    # Next event is 03:00 load up; an on-time observation resolves the active problem.
+    # Load up cannot resolve a clock fault, even when observed on time at 03:00.
     for seconds in range(17910, 18061, 30):
         await h.observe(seconds, 0 if seconds < 18000 else 9)
+    assert guard.data["desync_active"]
+    assert "resolved_at" not in guard.data
+    # The actual 06:00 tariff transition resolves it.
+    for seconds in range(28710, 28861, 30):
+        await h.observe(seconds, 9 if seconds < 28800 else 6)
     assert guard.data["status"] == "In sync" and not guard.data["desync_active"]
     assert guard.data["desync_count"] == 1 and guard.data["last_desync_at"]
     saved = await guard.store.async_load()
@@ -349,9 +430,9 @@ def test_schedule_digest_ignores_capture_metadata_and_hex_case():
 async def test_new_episode_inside_24_hours_still_cannot_write_again(harness):
     h = harness
     await miss(h)
-    for seconds in range(17910, 18061, 30):
-        await h.observe(seconds, 0 if seconds < 18000 else 9)
-    await miss(h, 8 * 3600, code=9)
+    for seconds in range(28710, 28861, 30):
+        await h.observe(seconds, 9 if seconds < 28800 else 6)
+    await miss(h, 17 * 3600, code=6)
     assert h.coordinator.clock_guard.data["desync_count"] == 2
     assert "24 hours" in h.coordinator.clock_guard.data["reason"]
     h.client.set_clock.assert_awaited_once()
