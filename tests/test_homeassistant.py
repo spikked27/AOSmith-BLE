@@ -193,6 +193,51 @@ async def test_new_pairing_retry_does_not_duplicate_enrollment(tmp_path):
     await hass.async_stop()
 
 
+async def test_heater_pairing_uses_heater_identifier_without_enrolling(tmp_path):
+    hass = HomeAssistant(str(tmp_path))
+    flow = ConfigFlow()
+    flow.hass = hass
+    flow._address = "AA:BB:CC:DD:EE:FF"
+    result = await flow.async_step_credentials({"pin": "123456", "pairing": "heater"})
+    assert result["step_id"] == "confirm"
+    client = SimpleNamespace(
+        read_asset_id=AsyncMock(return_value=(1, "HA0000000000000001")),
+        read_state=AsyncMock(return_value=HeaterState(125, 4, 5, 0)),
+        enroll=AsyncMock(),
+        disconnect=AsyncMock(),
+        enrollment_attempted=False,
+        identifier="HA0000000000000009",
+    )
+    with patch("custom_components.aosmith_ble.config_flow.make_client", return_value=client):
+        result = await flow.async_step_confirm({})
+    assert result["type"] == "create_entry"
+    assert result["data"]["pairing_identifier"] == "HA0000000000000001"
+    assert client.identifier == "HA0000000000000001"
+    client.enroll.assert_not_awaited()
+    await hass.async_stop()
+
+
+async def test_heater_pairing_empty_slot_asks_to_press_button(tmp_path):
+    hass = HomeAssistant(str(tmp_path))
+    flow = ConfigFlow()
+    flow.hass = hass
+    flow._address = "AA:BB:CC:DD:EE:FF"
+    await flow.async_step_credentials({"pin": "123456", "pairing": "heater"})
+    client = SimpleNamespace(
+        read_asset_id=AsyncMock(return_value=(0, "\x00" * 18)),
+        read_state=AsyncMock(),
+        enroll=AsyncMock(),
+        disconnect=AsyncMock(),
+        enrollment_attempted=False,
+    )
+    with patch("custom_components.aosmith_ble.config_flow.make_client", return_value=client):
+        result = await flow.async_step_confirm({})
+    assert result["errors"]["base"] == "no_asset_id"
+    client.read_state.assert_not_awaited()
+    client.enroll.assert_not_awaited()
+    await hass.async_stop()
+
+
 async def test_diagnostics_do_not_dump_entry_credentials(tmp_path, coordinator):
     hass = HomeAssistant(str(tmp_path))
     coordinator.client = SimpleNamespace(diagnostics=lambda: {"events": [], "connections": 2})

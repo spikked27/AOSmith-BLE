@@ -36,6 +36,8 @@ class FakePeripheral:
         self.active_writes = 0
         self.max_active_writes = 0
         self.separate_duration_status = False
+        # Pairing slot 1 as read by INIT (F2): None = empty (reads back as zeros).
+        self.slot_identifier = None
 
     async def connect(self, callback):
         self.is_connected = True
@@ -64,7 +66,13 @@ class FakePeripheral:
                 return
             assert crc(data[:-1]) == data[-1]
             opcode = data[1]
-            if opcode == 0xF0:
+            if opcode == 0xF2:
+                assert data[3:-1] == b"\x01"
+                if self.slot_identifier is None:
+                    self.send(reply(0x2F, b"\x00" + bytes(18)))
+                else:
+                    self.send(reply(0x2F, b"\x01" + self.slot_identifier.encode()))
+            elif opcode == 0xF0:
                 assert data[3:-1] == IDENTIFIER.encode()
                 self.send(reply(0x0F, b"\x01"))
             elif opcode == 0xF4:
@@ -487,3 +495,28 @@ async def test_preference_inspect_preserves_candidates_without_writing(client, p
     peripheral.registers[(28, 113)] = 2
     result = await client.inspect_registers(ENERGY_PREFERENCE_CANDIDATES)
     assert result["registers"]["energy_preference_candidate_ble"]["raw"] == 2
+
+
+async def test_read_asset_id_writes_nothing_and_authenticates_with_it(peripheral):
+    # Client starts with a placeholder identifier, as the config flow does before
+    # it knows the heater's own one.
+    client = HeaterClient(peripheral.connect, "123456", "HA0000000000000009", spacing=0, timeout=0.2)
+    peripheral.slot_identifier = IDENTIFIER
+    slot, asset = await client.read_asset_id()
+    assert (slot, asset) == (1, IDENTIFIER)
+    # Only the PIN and the INIT read went out: no enrollment, no auth, no register write.
+    assert [p[1] for p in peripheral.writes if p[0] == 0xBD] == [0xF2]
+    assert not any(p[1] == 0x40 for p in peripheral.writes if p[0] == 0xBD)
+    client.identifier = asset
+    await client.read_state()
+    assert sum(p[1] == 0xF1 for p in peripheral.writes if p[0] == 0xBD) == 1
+    diag = json.dumps(client.diagnostics()).lower()
+    assert IDENTIFIER.lower() not in diag
+    assert IDENTIFIER.encode().hex() not in diag
+
+
+async def test_read_asset_id_reports_empty_slot(client, peripheral):
+    slot, asset = await client.read_asset_id()
+    assert slot == 0
+    assert not asset.strip("\x00")
+    assert not any(p[1] in (0xF0, 0xF1, 0x40) for p in peripheral.writes if p[0] == 0xBD)

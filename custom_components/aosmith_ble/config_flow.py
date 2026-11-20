@@ -41,6 +41,10 @@ def is_heater(info):
     }
 
 
+class _NoAssetId(Exception):
+    """The heater's pairing slot was empty (Bluetooth button not pressed recently)."""
+
+
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
     MINOR_VERSION = 6
@@ -153,7 +157,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if reuse and not user_input.get(CONF_IDENTIFIER, "").strip():
                 errors[CONF_IDENTIFIER] = "identifier_required"
             if not errors:
-                self._new_pairing = not reuse
+                self._new_pairing = user_input["pairing"] == "new"
+                self._use_heater_id = user_input["pairing"] == "heater"
                 self._identifier = identifier
                 self._data = {CONF_ADDRESS: self._address, CONF_PIN: pin, CONF_IDENTIFIER: identifier}
                 return await self.async_step_confirm()
@@ -166,6 +171,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         {
                             "new": "Create a new local pairing",
                             "existing": "Reuse an existing local pairing",
+                            "heater": "Use the heater's own pairing ID (press its Bluetooth button first)",
                         }
                     ),
                     vol.Optional(CONF_IDENTIFIER, default=""): str,
@@ -180,7 +186,20 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             client = make_client(self.hass, self._data)
             try:
-                if self._new_pairing and not self._enroll_attempted:
+                if getattr(self, "_use_heater_id", False):
+                    # Heaters already paired with the official app keep the
+                    # app's assetID in slot 1 and ignore a freshly enrolled
+                    # identifier (seen on an HPS10-50H45DV: F0 answers 0x80
+                    # but F1 is refused). Authenticate with the heater's own
+                    # ID instead; it needs no write to the heater.
+                    slot, asset = await client.read_asset_id()
+                    if slot != 1 or not asset.strip("\x00"):
+                        errors["base"] = "no_asset_id"
+                        raise _NoAssetId()
+                    self._identifier = asset
+                    self._data[CONF_IDENTIFIER] = asset
+                    client.identifier = validate_identifier(asset)
+                elif self._new_pairing and not self._enroll_attempted:
                     await client.enroll()
                 state = await client.read_state()
                 minimum = 50 if state.mode == 2 else 90
@@ -190,6 +209,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     return self.async_create_entry(
                         title=self._name or "AO Smith water heater", data=self._data
                     )
+            except _NoAssetId:
+                pass
             except StatusError as err:
                 errors["base"] = "pairing_full" if err.code == 4 else "authentication_failed"
             except (BleakError, TimeoutError):
