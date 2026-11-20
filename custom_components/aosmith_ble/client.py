@@ -197,6 +197,28 @@ class HeaterClient:
         if not self._authenticated:
             await self._authenticate()
 
+    async def read_asset_id(self):
+        """Ask the heater for the identifier it already holds in pairing slot 1.
+
+        `BD F2 05 01` (INIT) answers `DB 2F 18 <slot> <18 ASCII bytes> <status> CRC`.
+        The slot is populated for about ten minutes after the panel's Bluetooth
+        button is pressed and reads as zeros otherwise. The value is the cloud
+        "assetID" the official app authenticates with; using it means no F0
+        enrollment has to be written to the heater at all. (Protocol notes:
+        github.com/stumpylog/aosmith-ble, docs/protocol/handshake.md.)
+        """
+        async with self._lock:
+            try:
+                await self._ensure_connection()
+                packet = await self._request(frame(0xF2, b"\x01"), lambda p: p[1] == 0x2F)
+            except BaseException:
+                await self._close()
+                raise
+            slot = packet[3] if len(packet) > 22 else 0
+            asset = bytes(packet[4:22]).decode("ascii", "replace") if len(packet) > 22 else ""
+            self._record("asset_id", slot=slot, populated=slot == 1)
+            return slot, asset
+
     async def enroll(self):
         """Only called following explicit one-time setup confirmation."""
         async with self._lock:

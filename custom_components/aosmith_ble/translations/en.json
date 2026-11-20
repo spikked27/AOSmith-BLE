@@ -54,7 +54,8 @@
       "authentication_failed": "Authentication failed. Verify PIN and identifier. If a pairing attempt timed out, reuse that same identifier.",
       "pairing_full": "The heater has no free pairing slots. No existing keys were deleted.",
       "invalid_response": "Unexpected or corrupt response. This model may use a different protocol profile.",
-      "unsupported_profile": "Readings do not match the supported next-generation heat-pump profile."
+      "unsupported_profile": "Readings do not match the supported next-generation heat-pump profile.",
+      "no_asset_id": "The heater's pairing slot is empty. Turn its Bluetooth off (hold the button 3 s), press the button once so the LED blinks, then retry within 10 minutes."
     },
     "abort": {
       "already_configured": "This heater is already configured.",
